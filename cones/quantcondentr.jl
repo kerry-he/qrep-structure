@@ -93,7 +93,6 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     dder3_aux_updated::Bool
 
     function QuantCondEntropy{T}(
-        dim::Int,
         n1::Int,
         n2::Int,
         sys::Int;
@@ -109,8 +108,7 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
         cone.sys = sys
         cone.X_dim = Hypatia.Cones.svec_length(cone.N)
         cone.Y_dim = Hypatia.Cones.svec_length(cone.n)
-        cone.dim = dim
-        @assert dim == 1 + cone.X_dim
+        cone.dim = 1 + cone.X_dim
 
         return cone
     end
@@ -200,8 +198,8 @@ function Hypatia.Cones.set_initial_point!(
     arr .= 0
     rt2 = cone.rt2
 
-    arr[1] = 0
-    X = Matrix{T}(I, cone.N, cone.N) / cone.N
+    arr[1] = 0.0
+    X = Matrix{T}(I, cone.N, cone.N)
     @views arr_X = arr[cone.X_idxs]
     Hypatia.Cones.smat_to_svec!(arr_X, X, rt2)
 

@@ -10,52 +10,105 @@ include("systemsolvers/elim.jl")
 include("utils/helper.jl")
 
 import Random
-Random.seed!(1)
+# Random.seed!(1)
 
 T = Float64
 
-# Rate distortion problem data
-n = 6
-N = n^2
-sn = Cones.svec_length(n)
-sN = Cones.svec_length(N)
-dim = sN + 1
+function qrd_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64)
+    # Build quantum rate distortion problem
+    #   min  S(B|BR)_X + S(Z)
+    #   s.t. Tr_B[X] = Z
+    #        <Δ,X> ≤ D
+    #        X ⪰ 0
 
-λ_A  = eigvals(randDensityMatrix(T, n))
-ρ_A  = diagm(λ_A)
-ρ_AR = purify(λ_A)
+    N = n * m
+    sn = Cones.svec_length(n)
+    sN = Cones.svec_length(N)
 
-D = 0.5
-Δ = zeros(T, sN)
-Cones.smat_to_svec!(Δ, I - ρ_AR, sqrt(2))
+    trB = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 1, (n, m)), N, n)
+    Δ_vec = Cones.smat_to_svec!(zeros(T, sN), Δ, sqrt(2.))
+    
+    # Build problem model
+    A1 = hcat(zeros(T, sn, 1), trB    , zeros(T, sn, 1))        # Tr_B[X] = Z
+    A2 = hcat(zero(T)        , Δ_vec' , one(T))                 # D = <Δ,X>
+    A  = vcat(A1, A2)
 
-tr2 = lin_to_mat(T, x -> pTr!(zeros(T, n, n), x, 2, (n, n)), N, n)
+    b = zeros(T, sn + 1)
+    @views Cones.smat_to_svec!(b[1:sn], Z, sqrt(2.))
+    b[end] = D
+
+    c = vcat(one(T), zeros(T, sN + 1))
+
+    G = -one(T) * I
+    h = zeros(T, sN + 2)
+
+    cones = [QuantCondEntropy{T}(n, m, 2), Cones.Nonnegative{T}(1)]
+
+    return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(Z))
+end
+
+function qrd_naive_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64) where {T <: Real}
+    # Build quantum rate distortion problem
+    #   min  S(B|BR)_X + S(Z)
+    #   s.t. Tr_B[X] = Z
+    #        <Δ,X> ≤ D
+    #        X ⪰ 0
+
+    N = n * m
+    sn = Cones.svec_length(n)
+    sN = Cones.svec_length(N)
+
+    ikr_trR = lin_to_mat(T, x -> idKron!(zeros(T, N, N), pTr!(zeros(T, n, n), x, 2, (n, m)), 2, (n, m)), N, N)
+    trB     = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 1, (n, m)), N, n)
+    Δ_vec   = Cones.smat_to_svec!(zeros(T, sN), Δ, sqrt(2.))
+    
+    # Build problem model
+    A = hcat(zeros(T, sn, 1), trB)        # Tr_B[X] = Z
+    b = Cones.smat_to_svec!(zeros(T, sn), Z, sqrt(2.))
+    
+    G1 = hcat(one(T)         , zeros(T, 1, sN))
+    G2 = hcat(zeros(T, sN, 1), ikr_trR)
+    G3 = hcat(zeros(T, sN, 1), one(T)*I(sN))
+    G4 = hcat(zero(T)        , -Δ_vec')
+    G = -vcat(G1, G2, G3, G4)
+
+    h = zeros(T, 2 + 2*sN)
+    h[end] = D
+
+    c = vcat(one(T), zeros(T, sN))
+
+    cones = [Cones.EpiTrRelEntropyTri{T, T}(1 + 2*sN), Cones.Nonnegative{T}(1)]
+
+    return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(Z))
+end
 
 
-# Build problem model
-A1 = hcat(zeros(T, sn, 1), tr2, zeros(T, sn, 1))
-A2 = hcat(0              , Δ' , 1)
-A = vcat(A1, A2)
+function main()
+    # Define rate distortion problem with entanglement fidelity distortion
+    n = 8
+    λ = eigvals(randDensityMatrix(T, n))
+    Z = diagm(λ)    
+    Δ = I - purify(λ)
+    D = 0.4
+    
+    model = qrd_problem(n, n, Z, Δ, D)
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    
+    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
+    println("Num iter: ", Solvers.get_num_iters(solver))
+    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
 
-b = zeros(T, sn + 1)
-@views b1 = b[1:sn]
-Cones.smat_to_svec!(b1, ρ_A, sqrt(2))
-b[end] = D
 
-c = vcat(one(T), zeros(T, dim-1), 0)
-G = -one(T) * I
-h = zeros(T, dim + 1)
+    model = qrd_naive_problem(n, n, Z, Δ, D)
+    solver = Solvers.Solver{T}(verbose = true)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    
+    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
+    println("Num iter: ", Solvers.get_num_iters(solver))
+    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))    
+end
 
-
-# Solve problem
-cones = [QuantCondEntropy{T}(dim, n, n, 1), Cones.Nonnegative{T}(1)]
-model = Hypatia.Models.Model{T}(c, A, b, G, h, cones)
-
-solver = Solvers.Solver{T}(verbose = true, reduce = false, preprocess = false, syssolver = ElimSystemSolver{T}())
-Solvers.load(solver, model)
-
-Solvers.solve(solver)
-
-println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-println("Num iter: ", Solvers.get_num_iters(solver))
-println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+main()

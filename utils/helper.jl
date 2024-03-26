@@ -121,3 +121,14 @@ function purify(λ::Vector{T}) where {T <: Real}
     vec[collect(1:n+1:n^2)] .= sqrt.(λ)
     return vec * vec'
 end
+
+function entr(X::Matrix)
+    λ = eigvals(X)
+    λ = λ[λ .> 0]
+    return sum(λ .* log.(λ))
+end
+
+function entr(λ::Vector{T}) where {T <: Real}
+    λ = λ[λ .> 0]
+    return sum(λ .* log.(λ))
+end
