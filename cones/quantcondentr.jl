@@ -1,9 +1,9 @@
 using LinearAlgebra
 import Hypatia.Cones
-# import Hypatia.spectral_outer!
 
+include("../utils/helper.jl")
 
-mutable struct EpiCondEntropyTri{T <: Real} <: Hypatia.Cones.Cone{T}
+mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     use_dual_barrier::Bool
     dim::Int
 
@@ -92,7 +92,7 @@ mutable struct EpiCondEntropyTri{T <: Real} <: Hypatia.Cones.Cone{T}
     invhessprod_aux_updated::Bool
     dder3_aux_updated::Bool
 
-    function EpiCondEntropyTri{T}(
+    function QuantCondEntropy{T}(
         dim::Int,
         n1::Int,
         n2::Int,
@@ -116,7 +116,7 @@ mutable struct EpiCondEntropyTri{T <: Real} <: Hypatia.Cones.Cone{T}
     end
 end
 
-function Hypatia.Cones.reset_data(cone::EpiCondEntropyTri)
+function Hypatia.Cones.reset_data(cone::QuantCondEntropy)
     return (
         cone.feas_updated =
             cone.grad_updated =
@@ -129,7 +129,7 @@ function Hypatia.Cones.reset_data(cone::EpiCondEntropyTri)
 end
 
 function Hypatia.Cones.setup_extra_data!(
-    cone::EpiCondEntropyTri{T},
+    cone::QuantCondEntropy{T},
 ) where {T <: Real}
     n = cone.n
     N = cone.N
@@ -191,25 +191,24 @@ function Hypatia.Cones.setup_extra_data!(
     return cone
 end
 
-Hypatia.Cones.get_nu(cone::EpiCondEntropyTri) = 1 + cone.N
+Hypatia.Cones.get_nu(cone::QuantCondEntropy) = 1 + cone.N
 
 function Hypatia.Cones.set_initial_point!(
     arr::AbstractVector{T},
-    cone::EpiCondEntropyTri{T},
+    cone::QuantCondEntropy{T},
 ) where {T <: Real}
     arr .= 0
     rt2 = cone.rt2
 
     arr[1] = 0
     X = Matrix{T}(I, cone.N, cone.N) / cone.N
-
     @views arr_X = arr[cone.X_idxs]
     Hypatia.Cones.smat_to_svec!(arr_X, X, rt2)
 
     return arr
 end
 
-function Hypatia.Cones.update_feas(cone::EpiCondEntropyTri{T}) where {T <: Real}
+function Hypatia.Cones.update_feas(cone::QuantCondEntropy{T}) where {T <: Real}
     @assert !cone.feas_updated
     point = cone.point
 
@@ -246,7 +245,7 @@ function Hypatia.Cones.update_feas(cone::EpiCondEntropyTri{T}) where {T <: Real}
     return cone.is_feas
 end
 
-function Hypatia.Cones.update_grad(cone::EpiCondEntropyTri)
+function Hypatia.Cones.update_grad(cone::QuantCondEntropy)
     @assert cone.is_feas
     rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
@@ -256,10 +255,6 @@ function Hypatia.Cones.update_grad(cone::EpiCondEntropyTri)
     DPhiX = cone.DPhiX
 
     matN = cone.matN
-
-    # println("epi=", cone.point[1], ";")
-    # println("X=", cone.X, ";")
-    # println("Y=", cone.Y, ";")
 
     spectral_outer!(Xi, Ux, inv.(Λx), matN)
 
@@ -276,7 +271,7 @@ function Hypatia.Cones.update_grad(cone::EpiCondEntropyTri)
     return cone.grad
 end
 
-function update_hessprod_aux(cone::EpiCondEntropyTri)
+function update_hessprod_aux(cone::QuantCondEntropy)
     @assert !cone.hessprod_aux_updated
     @assert cone.grad_updated
 
@@ -294,7 +289,7 @@ end
 function Hypatia.Cones.hess_prod!(
     prod::AbstractVecOrMat{T},
     arr::AbstractVecOrMat{T},
-    cone::EpiCondEntropyTri{T},
+    cone::QuantCondEntropy{T},
 ) where {T <: Real}
     @assert cone.grad_updated
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
@@ -320,10 +315,6 @@ function Hypatia.Cones.hess_prod!(
     matN2 = cone.matN2
     matN3 = cone.matN3
 
-    # println("epi=", cone.point[1], ";")
-    # println("X=", cone.X, ";")
-    # println("Y=", cone.Y, ";")
-
     @inbounds for j in 1:size(arr, 2)
 
         @views H = arr[:, j]
@@ -333,9 +324,6 @@ function Hypatia.Cones.hess_prod!(
         @views Hypatia.Cones.svec_to_smat!(HX, H[cone.X_idxs], rt2)
         LinearAlgebra.copytri!(HX, 'U')
         pTr!(HY, HX, cone.sys, (cone.n1, cone.n2))
-
-        # println("HX=", HX)
-        # println("Ht=", Ht)
 
         @views prod_x = prod[cone.X_idxs, j]
 
@@ -374,7 +362,7 @@ function Hypatia.Cones.hess_prod!(
     return prod
 end
 
-function update_invhessprod_aux(cone::EpiCondEntropyTri)
+function update_invhessprod_aux(cone::QuantCondEntropy)
     @assert !cone.invhessprod_aux_updated
     @assert cone.grad_updated
     @assert cone.hessprod_aux_updated
@@ -418,8 +406,6 @@ function update_invhessprod_aux(cone::EpiCondEntropyTri)
     
     @. matN = 1 / (Λx' * Λx)
     @. Δ2x_comb_inv = 1 / (Δ2x_log*zi + matN)
-    # D2x_inv = 1 ./ (obj.Dx' .* obj.Dx);
-    # obj.D2x_comb_inv = 1 ./ (obj.D2x_log/obj.xi + D2x_inv);
 
     # Construct matrices
     # TODO
@@ -476,33 +462,6 @@ function update_invhessprod_aux(cone::EpiCondEntropyTri)
 
     cone.HYY_KHxK_chol = cholesky(Hermitian(HYY_KHxK))
 
-
-    # # % Block elimination for gradient
-    # spectral_outer!(matN, Ux', DPhiX, matN2)
-    # # spectral_outer!(matN, Ux', Symmetric(DPhiX, :U), matN2)
-    # @. matN *= Δ2x_comb_inv
-    # spectral_outer!(matN3, Ux, matN, matN2)
-    # # spectral_outer!(matN3, Ux, Symmetric(matN, :U), matN2)
-
-    # pTr!(matn, matN3, cone.sys, (cone.n1, cone.n2))
-    # smat_to_svec!(vecm, matn, rt2)
-    # vecm .*= -1
-    
-    # vecm2 .= cone.HYY_KHxK_chol \ vecm
-
-    # svec_to_smat!(matn, vecm2, rt2)
-    # copytri!(matn, 'U')
-    # idKron!(matN, matn, cone.sys, (cone.n1, cone.n2))
-    # # spectral_outer!(matN4, Ux', Symmetric(matN, :U), matN2)
-    # spectral_outer!(matN4, Ux', matN, matN2)
-    # matN4 .*= Δ2x_comb_inv
-    # spectral_outer!(matN, Ux, matN4, matN2)
-    # # spectral_outer!(matN, Ux, Symmetric(matN4, :U), matN2)
-    # @. H_inv_g_x = matN3 - matN
-
-    # cone.DPhi_H_DPhi = dot(H_inv_g_x, DPhiX)
-
-
     cone.invhessprod_aux_updated = true
     return
 end
@@ -510,7 +469,7 @@ end
 function Hypatia.Cones.inv_hess_prod!(
     prod::AbstractVecOrMat{T},
     arr::AbstractVecOrMat{T},
-    cone::EpiCondEntropyTri{T},
+    cone::QuantCondEntropy{T},
 ) where {T <: Real}
     @assert cone.grad_updated
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
@@ -550,21 +509,12 @@ function Hypatia.Cones.inv_hess_prod!(
         LinearAlgebra.copytri!(HX, 'U')
         pTr!(HY, HX, cone.sys, (cone.n1, cone.n2))
 
-        # println("HX=", HX, ";")
-        # println("Ht=", Ht, ";")
-
 
         # Compute combined direction
         @. matN3 = Ht * DPhiX
         @. matN3 += HX
-        # W_H_DPhi = dot(H_inv_g_x, matN3)
 
         # Block elimination for variable
-        # symmWX = Symmetric(WX, :U)
-        # Ux_adjoint = adjoint(Ux)
-        # mul!(matN, Ux', WX)
-        # mul!(matN2, matN, Ux)
-        # matN .= Ux' * WX * Ux
         spectral_outer!(matN, Ux', matN3, matN2)
         # spectral_outer!(matN, Ux_adjoint, symmWX, matN2)
         @. matN *= Δ2x_comb_inv
@@ -593,20 +543,11 @@ function Hypatia.Cones.inv_hess_prod!(
         Hypatia.Cones.smat_to_svec!(H_inv_w_x, matN3, rt2)
 
     end
-
-    # println("epi=", cone.point[1], ";")
-    # println("X=", cone.X, ";")
-    # println("Y=", cone.Y, ";")
-
-    # other_prod = zeros(T, size(arr, 1), size(arr, 2))
-    # hess_prod!(other_prod, prod, cone)
-    # println("Err: ", sum(abs.(arr - other_prod), dims=1) )
-
         
     return prod
 end
 
-function update_dder3_aux(cone::EpiCondEntropyTri)
+function update_dder3_aux(cone::QuantCondEntropy)
     @assert !cone.dder3_aux_updated
     @assert cone.hessprod_aux_updated
 
@@ -617,7 +558,7 @@ function update_dder3_aux(cone::EpiCondEntropyTri)
     return
 end
 
-function Hypatia.Cones.dder3(cone::EpiCondEntropyTri{T}, dir::AbstractVector{T}) where {T <: Real}
+function Hypatia.Cones.dder3(cone::QuantCondEntropy{T}, dir::AbstractVector{T}) where {T <: Real}
     @assert cone.grad_updated
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.dder3_aux_updated || update_dder3_aux(cone)
@@ -654,12 +595,6 @@ function Hypatia.Cones.dder3(cone::EpiCondEntropyTri{T}, dir::AbstractVector{T})
     @views Hypatia.Cones.svec_to_smat!(HX, dir[cone.X_idxs], rt2)
     LinearAlgebra.copytri!(HX, 'U')
     pTr!(HY, HX, cone.sys, (cone.n1, cone.n2))
-
-    # println("epi=", cone.point[1], ";")
-    # println("X=", cone.X, ";")
-
-    # println("Ht=", Ht, ";")
-    # println("HX=", HX, ";")
 
     # Precompute rotated directions
     UxHxUx = zeros(T, N, N)
@@ -708,64 +643,12 @@ function Hypatia.Cones.dder3(cone::EpiCondEntropyTri{T}, dir::AbstractVector{T})
     @views dder3_X = dder3[cone.X_idxs]
     @views Hypatia.Cones.smat_to_svec!(dder3_X, matN, rt2)
 
-    @. dder3 *= -0.5 * 0
+    @. dder3 *= -0.5
 
     return dder3
 end
 
 #-----------------------------------------------------------------------------------------------------
-
-function pTr!(ptrX::Matrix{T}, X::Matrix{T}, sys::Int = 2, dim::Union{Tuple{Int, Int}, Nothing} = nothing) where {T <: Real}
-
-    if dim === nothing
-        n1 = n2 = isqrt(size(X, 1))
-    else
-        n1 = dim[1]
-        n2 = dim[2]
-    end
-    @assert n1*n2 == size(X, 1) == size(X, 2)
-
-    if sys == 2
-        @assert size(ptrX, 1) == size(ptrX, 2) == n1
-        ptrX .= 0
-        @inbounds for i = 1:n1, j = 1:n1
-            @views X_views = X[(i-1)*n2+1 : i*n2, (j-1)*n2+1 : j*n2]
-            @inbounds for k = 1:n2
-                ptrX[i, j] += X_views[k, k]
-            end
-            
-        end
-    else
-        @assert size(ptrX, 1) == size(ptrX, 2) == n2
-        ptrX .= 0
-        @inbounds for i = 1:n1
-            @. ptrX += X[(i-1)*n2+1 : i*n2, (i-1)*n2+1 : i*n2]
-        end
-    end
-
-    return ptrX
-end
-
-function idKron!(kronI::Matrix{T}, X::Matrix{T}, sys::Int = 2, dim::Union{Tuple{Int, Int}, Nothing} = nothing) where {T <: Real}
-
-    if dim === nothing
-        n1 = n2 = isqrt(size(kronI, 1))
-    else
-        n1 = dim[1]
-        n2 = dim[2]
-    end
-    @assert n1*n2 == size(kronI, 1) == size(kronI, 2)
-
-    if sys == 2
-        @assert size(X, 1) == size(X, 2) == n1
-        kron!(kronI, X, Matrix{T}(I, n2, n2))
-    else
-        @assert size(X, 1) == size(X, 2) == n2
-        kron!(kronI, Matrix{T}(I, n1, n1), X)
-    end
-
-    return kronI
-end
 
 function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: Real}
     rteps = sqrt(eps(T))
@@ -787,7 +670,7 @@ function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: 
     end
 
     # make symmetric
-    LinearAlgebra.copytri!(Δ2, 'U')
+    LinearAlgebra.LinearAlgebra.LinearAlgebra.copytri!(Δ2, 'U')
     return Δ2
 end
 

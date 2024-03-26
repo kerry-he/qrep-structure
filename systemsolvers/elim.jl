@@ -80,8 +80,10 @@ function Hypatia.Solvers.solve_system(
     (c, b, h)    = (model.c, model.b, model.h)
     (xb, yb, zb) = (syssolver.xb, syssolver.yb, syssolver.zb)
 
+    # Compute 3x3 subsystem
     (xr, yr, zr) = solve_subsystem(syssolver, solver, rhs.x, rhs.y, rhs.z, rhs.s)
 
+    # Backsubstitute solve system
     sol.tau[] = (rhs.tau[] + rhs.kap[] + c'*xr + b'*yr + h'*zr) / (mu/tau/tau + c'*xb + b'*yb + h'*zb)
     copyto!(sol.x, xr - sol.tau[] * xb)
     copyto!(sol.y, yr - sol.tau[] * yb)

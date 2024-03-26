@@ -1,12 +1,11 @@
 using LinearAlgebra
-using JuMP
-push!(LOAD_PATH, "./src/")
-using Hypatia
+
+import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
 using Random
 
-include("cones/condentropy.jl")
+include("cones/quantcondentr.jl")
 include("systemsolvers/elim.jl")
 
 function heisenberg(delta,L)
@@ -52,9 +51,9 @@ end
 #        Tr_1 rho == Tr_L rho
 #        S(L|1...L-1) >= 0
 
-L = 4;
-H = heisenberg(-1,L); # Hamiltonian
-dims = 2*ones(Int,L);
+L = 2
+H = heisenberg(-1,L) # Hamiltonian
+dims = 2*ones(Int,L)
 
 N = 2^L
 sN = Cones.svec_length(N)
@@ -67,6 +66,8 @@ rt2 = sqrt(2)
 
 
 # Build problem model
+# tr1 = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 1, (2, m)), N, m)
+
 tr1 = get_ptr(2, m, sm, sN, 1)
 trend = get_ptr(2, m, sm, sN, 2)
 Id = zeros(sN)
@@ -91,15 +92,26 @@ G = -1.0 * I
 h = zeros(1 + sN)
 
 
-cones = [EpiCondEntropyTri{Float64}(1 + sN, 2^(L-1), 2, 2)]
+cones = [QuantCondEntropy{Float64}(1 + sN, 2^(L-1), 2, 2)]
 model = Hypatia.Models.Model{Float64}(c, A, b, G, h, cones)
 
 solver = Solvers.Solver{Float64}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{Float64}())
-# solver = Solvers.Solver{Float64}(verbose = true)
 Solvers.load(solver, model)
 
 Solvers.solve(solver)
 
-println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
+println("Solve time: ", Solvers.get_solve_time(solver))
+println("Num iter: ", Solvers.get_num_iters(solver))
+println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+
+cones = [QuantCondEntropy{Float64}(1 + sN, 2^(L-1), 2, 2)]
+model = Hypatia.Models.Model{Float64}(c, A, b, G, h, cones)
+
+solver = Solvers.Solver{Float64}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{Float64}())
+Solvers.load(solver, model)
+
+Solvers.solve(solver)
+
+println("Solve time: ", Solvers.get_solve_time(solver))
 println("Num iter: ", Solvers.get_num_iters(solver))
 println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
