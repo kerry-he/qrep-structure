@@ -2,20 +2,23 @@ using LinearAlgebra
 import Hypatia.Solvers
 import Hypatia.Cones
 
-import Hypatia.posdef_fact_copy!
+# Solves the following square Newton system
+#            - A'*y     - c*tau + z         = rx
+#        A*x            - b*tau             = ry
+#      -c'*x - b'*y                 - kappa = rtau
+#     mu*H*x                    + z         = rz 
+#                    mu/t^2*tau     + kappa = rkappa
+# for (x, y, z, tau, kappa) given right-hand residuals (rx, ry, rz, rtau, rkappa)
+# by using elimination.
 
 mutable struct ElimSystemSolver{T <: Real} <: Hypatia.Solvers.SystemSolver{T}
-    rhs_sub::Hypatia.Solvers.Point{T}
-    sol_sub::Hypatia.Solvers.Point{T}
-    sol_const::Hypatia.Solvers.Point{T}
-    rhs_const::Hypatia.Solvers.Point{T}
-
-    # H::Matrix{T}
     HA::Matrix{T}
     AHA::Matrix{T}
     AHA_chol::Factorization{T}
 
-    use_sqrt_hess_cones::Vector{Bool}
+    xb::Vector{T}
+    yb::Vector{T}
+    zb::Vector{T}
 
     function ElimSystemSolver{T}() where {T <: Real}
         syssolver = new{T}()
@@ -27,9 +30,12 @@ function Hypatia.Solvers.load(syssolver::ElimSystemSolver{T}, solver::Hypatia.So
     model = solver.model
     (n, p) = (model.n, model.p)
 
-    # syssolver.H   = zeros(T, n, n)
     syssolver.HA  = zeros(T, n, p)
     syssolver.AHA = zeros(T, p, p)
+
+    syssolver.xb = zeros(T, model.n)
+    syssolver.yb = zeros(T, model.p)
+    syssolver.zb = zeros(T, model.q)
 
     return syssolver
 end
@@ -40,20 +46,22 @@ function Hypatia.Solvers.update_lhs(
     solver::Hypatia.Solvers.Solver{T},
 ) where {T <: Real}
     model = solver.model
-    cones = model.cones
-    cone_idxs = model.cone_idxs
-    n = model.n
+    n = model.n    
 
     A = model.A
-    # H = syssolver.H
     HA = syssolver.HA
     AHA = syssolver.AHA
 
-    # blk_hess_prod!(H, Matrix{T}(I, n, n), cones, cone_idxs)
-    blk_inv_hess_prod!(HA, A', cones, cone_idxs)
+    # Compute Schur complement matrix
+    blk_inv_hess_prod!(HA, A', model.cones, model.cone_idxs)
     mul!(AHA, A, HA)
-
     syssolver.AHA_chol = factorize(AHA)
+
+    # Compute constant 3x3 subsystem
+    (xb, yb, zb) = solve_subsystem(syssolver, solver, model.c, model.b, model.h, zeros(T, n))
+    copyto!(syssolver.xb, xb)
+    copyto!(syssolver.yb, yb)
+    copyto!(syssolver.zb, zb)
 
     return syssolver
 end
@@ -66,47 +74,19 @@ function Hypatia.Solvers.solve_system(
     rhs::Hypatia.Solvers.Point{T},
 ) where {T <: Real}
     model = solver.model
-    cones = model.cones
-    cone_idxs = model.cone_idxs
 
-    n = model.n
     mu = solver.mu
     tau = solver.point.tau[]
-    A = model.A
-    c = model.c
-    b = model.b
+    (c, b, h)    = (model.c, model.b, model.h)
+    (xb, yb, zb) = (syssolver.xb, syssolver.yb, syssolver.zb)
 
-    # println("A=", A)
-    # println("c=", c)
-    # println("b=", b)
-    # println("mu=", mu)
-    # println("tau=", tau)
-    # println("rhs=", rhs.vec)
+    (xr, yr, zr) = solve_subsystem(syssolver, solver, rhs.x, rhs.y, rhs.z, rhs.s)
 
-    # temp_H = zeros(T, n, n)
-    # blk_hess_prod!(temp_H, Matrix{T}(I, n, n), cones, cone_idxs)
-
-    # println("H=", temp_H)
-    # println()
-
-    Hrs = zeros(T, n)
-    blk_inv_hess_prod!(Hrs, rhs.s, cones, cone_idxs)
-
-    (xr, yr, zr) = solve_subsystem(syssolver, solver, rhs.x, rhs.y, rhs.z + Hrs)
-    (xb, yb, zb) = solve_subsystem(syssolver, solver, c, b, zeros(T, n))
-
-    sol.tau[] = (rhs.tau[] + rhs.kap[] + c'*xr + b'*yr) / (mu/tau/tau + c'*xb + b'*yb)
+    sol.tau[] = (rhs.tau[] + rhs.kap[] + c'*xr + b'*yr + h'*zr) / (mu/tau/tau + c'*xb + b'*yb + h'*zb)
     copyto!(sol.x, xr - sol.tau[] * xb)
     copyto!(sol.y, yr - sol.tau[] * yb)
     copyto!(sol.z, zr - sol.tau[] * zb)
-    # sol.x = xr - sol.tau[] * xb
-    # sol.y = yr - sol.tau[] * yb
-    # sol.z = zr - sol.tau[] * zb
-    
-    Hz = zeros(T, n)
-    blk_inv_hess_prod!(Hz, sol.z, cones, cone_idxs)
-    copyto!(sol.s, Hrs - Hz)
-    # sol.s = (Hrs - Hz) / mu
+    copyto!(sol.s, -model.G*sol.x - rhs.z + sol.tau[]*h)
     sol.kap[] = rhs.kap[] - mu/tau/tau * sol.tau[]
 
     return sol
@@ -119,26 +99,28 @@ function solve_subsystem(
     rx::AbstractVector{T},
     ry::AbstractVector{T},
     rz::AbstractVector{T},
+    rs::AbstractVector{T},
 ) where {T <: Real}
     model = solver.model
     cones = model.cones
     cone_idxs = model.cone_idxs
 
-    (n, p) = (model.n, model.p)
+    n = model.n
     A = model.A
 
-    Hrx = zeros(T, n)
-    blk_inv_hess_prod!(Hrx, rx, cones, cone_idxs)
-    rhs_y = A * Hrx + A*rz + ry
+    # Compute y solution
+    Hrxrs = zeros(T, n)
+    blk_inv_hess_prod!(Hrxrs, rx + rs, cones, cone_idxs)
+    rhs_y = A * (Hrxrs + rz) + ry
     y = syssolver.AHA_chol \ rhs_y
 
-    HAy = zeros(T, n)
-    blk_inv_hess_prod!(HAy, A'*y, cones, cone_idxs)
-    x = (Hrx - HAy) + rz
+    # Compute x solution
+    HrxrsAy = zeros(T, n)
+    blk_inv_hess_prod!(HrxrsAy, rx + rs - A'*y, cones, cone_idxs)
+    x = HrxrsAy + rz
 
-    z = -rx + A'*y;
-    # z = zeros(T, n)
-    # blk_hess_prod!(z, rz - x, cones, cone_idxs)
+    # Compute z solution
+    z = -rx + A'*y
 
     return (x, y, z)
 end

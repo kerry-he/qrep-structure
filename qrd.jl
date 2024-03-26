@@ -46,7 +46,7 @@ import Random
 Random.seed!(1)
 
 T = Float64
-n = 10
+n = 4
 N = n^2
 sn = Cones.svec_length(n)
 sN = Cones.svec_length(N)
@@ -86,8 +86,6 @@ cones = [EpiCondEntropyTri{T}(dim, n, n, 1), Cones.Nonnegative{T}(1)]
 model = Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 
 solver = Solvers.Solver{T}(verbose = true, reduce = false, preprocess = false, syssolver = ElimSystemSolver{T}())
-# solver = Solvers.Solver{T}(verbose = true, reduce = false, preprocess = false)
-# solver = Solvers.Solver{T}(verbose = true)
 Solvers.load(solver, model)
 
 Solvers.solve(solver)
