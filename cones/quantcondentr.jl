@@ -217,7 +217,7 @@ function Hypatia.Cones.update_feas(cone::QuantCondEntropy{T}) where {T <: Real}
 
     XH = Hermitian(cone.X, :U)
     YH = Hermitian(cone.Y, :U)
-    if isposdef(XH) && isposdef(YH)
+    if isposdef(XH)
         # TODO use LAPACK syev! instead of syevr! for efficiency
         X_fact = cone.X_fact = eigen(XH)
         Y_fact = cone.Y_fact = eigen(YH)

@@ -3,24 +3,54 @@ import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
 
-include("systemsolvers/elim.jl")
+include("cones/quantmutualinf.jl")
+include("utils/helper.jl")
 
 T = Float64
 
-function main()
-    (Xn, Xm) = (3, 4)
-    dim = Xn * Xm
-    c = vcat(one(T), zeros(T, dim))
-    A = hcat(zeros(T, dim, 1), Matrix{T}(I, dim, dim))
-    b = rand(T, dim)
-    G = -one(T) * I
-    h = vcat(zero(T), rand(T, dim))
-    cones = [Cones.EpiNormSpectral{T, T}(Xn, Xm)]
-    model = Hypatia.Models.Model{T}(c, A, b, G, h, cones)
+ϵ = 1e-8
+ni = 4
+no = 4
+ne = 4
+V = randStinespringOperator(T, ni, no, ne)
 
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, preprocess = false, syssolver = ElimSystemSolver{T}())
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
+K = QuantMutualInformation{T}(ni, no, ne, V)
+Cones.setup_extra_data!(K)
+K.point = Cones.set_initial_point!(zeros(T, K.dim), K)
+K.grad = zeros(T, K.dim)
+
+while true
+    Cones.reset_data(K)
+    x0 = randn(T, K.dim)
+    Hypatia.Cones.load_point(K, x0)
+    
+    if Hypatia.Cones.update_feas(K)
+        break
+    end
 end
- 
-main()
+
+H = randn(T, K.dim)
+x0 = copyto!(zeros(T, K.dim), K.point)
+f0 = K.fval
+g0 = Hypatia.Cones.update_grad(K)
+
+
+f1 = zeros(T, K.dim)
+for i in 1:K.dim
+    Cones.reset_data(K)
+    x1 = copyto!(zeros(T, K.dim), x0)
+    x1[i] += ϵ
+    Hypatia.Cones.load_point(K, x1)
+    Hypatia.Cones.update_feas(K)
+    f1[i] = K.fval
+end
+
+x1 = x0 + ϵ*H
+Cones.reset_data(K)
+Hypatia.Cones.load_point(K, x1)
+Hypatia.Cones.update_feas(K)
+g1 = Hypatia.Cones.update_grad(K)
+
+
+println("Gradient test (FDD=0): ", norm(0.5 * (g0 + g1) - ((f1 .- f0) ./ ϵ)))
+println("Gradient test (ID=nu): ", (-g0' * x0))

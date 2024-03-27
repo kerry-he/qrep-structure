@@ -101,6 +101,21 @@ function randDensityMatrix(R::Type, n::Int)
     return rho / tr(rho)
 end
 
+function randUnitary(R::Type, n::Int)
+    # Random unitary uniformly distributed on Haar measure
+    # https://case.edu/artsci/math/esmeckes/Meckes_SAMSI_Lecture2.pdf
+    X = randn(R, n, n)
+    U, _ = qr(X)
+    return U
+end
+
+function randStinespringOperator(R::Type, nin::Int, nout::Int, nenv::Int)
+    # Random Stinespring operator uniformly distributed on Hilbert-Schmidt measure
+    # https://arxiv.org/abs/2011.02994
+    U = randUnitary(R, nout * nenv)
+    return U[:, 1:nin]
+end
+
 function purify(rho::Matrix{Hypatia.RealOrComplex{T}}) where {T <: Real}
     # Returns a purification of a quantum state
     n = size(X, 1)
