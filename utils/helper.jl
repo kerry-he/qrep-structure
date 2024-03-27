@@ -25,6 +25,7 @@ function lin_to_mat(
         H = zeros(vni)
         H[k] = 1.
         Hypatia.Cones.svec_to_smat!(H_mat, H, rt2)
+        LinearAlgebra.copytri!(H_mat, 'U')
 
         # Get column of matrix
         A_H = A(H_mat)

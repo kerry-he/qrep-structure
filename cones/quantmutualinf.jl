@@ -87,7 +87,7 @@ mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
 
         # Build linear maps of quantum channels
         cone.N  = lin_to_mat(T, x -> pTr!(zeros(T, no, no), V*x*V', 2, (no, ne)), ni, no)         # Quantum channel
-        cone.Nc = lin_to_mat(T, x -> pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne)), ni, no)         # Complementary channel
+        cone.Nc = lin_to_mat(T, x -> pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne)), ni, ne)         # Complementary channel
         cone.tr = Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Matrix{T}(I, ni, ni), cone.rt2) # Trace operator
 
         return cone
@@ -167,8 +167,8 @@ function Hypatia.Cones.update_feas(cone::QuantMutualInformation{T}) where {T <: 
     LinearAlgebra.copytri!(cone.NcX, 'U')
 
     XH   = Hermitian(cone.X, :U)
-    NXH  = Hermitian(cone.X, :U)
-    NcXH = Hermitian(cone.X, :U)
+    NXH  = Hermitian(cone.NX, :U)
+    NcXH = Hermitian(cone.NcX, :U)
 
     if isposdef(XH)
         X_fact = cone.X_fact = eigen(XH)
@@ -214,18 +214,18 @@ function Hypatia.Cones.update_grad(cone::QuantMutualInformation)
     spectral_outer!(Xi, Ux, inv.(Λx), zeros(T, size(Xi)))
 
     log_X      = Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), cone.X_log, rt2)
-    N_log_NX   = cone.N' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), cone.NX_log, rt2)
+    N_log_NX   = cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), cone.NX_log, rt2)
     Nc_log_NcX = cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), cone.NcX_log, rt2)
     tr_log_trX = cone.tr  * cone.trX_log
 
     zi = inv(cone.z)
-    @. DPhi = log_X + N_log_NX - Nc_log_NcX - tr_log_trX
-    
+    DPhi = log_X + N_log_NX - Nc_log_NcX - tr_log_trX
+    display(DPhi)
+
     g = cone.grad
-    @views g_x = g[cone.X_idxs]
-    g[1] = -zi;
-    Hypatia.Cones.smat_to_svec!(g_x, -Xi, rt2)
-    g_x .-= zi*DPhi
+    g[1] = -zi
+    @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], -Xi, rt2)
+    g[cone.X_idxs] += zi * DPhi
 
     cone.grad_updated = true
     return cone.grad
