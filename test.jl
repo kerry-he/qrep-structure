@@ -54,6 +54,7 @@ H = randn(T, K.dim)
 x0 = copyto!(zeros(T, K.dim), K.point)
 f0 = K.fval
 g0 = Hypatia.Cones.update_grad(K)
+H0 = Hypatia.Cones.hess_prod!(zeros(T, K.dim), H, K)
 
 
 f1 = zeros(T, K.dim)
@@ -71,7 +72,13 @@ Cones.reset_data(K)
 Hypatia.Cones.load_point(K, x1)
 Hypatia.Cones.update_feas(K)
 g1 = Hypatia.Cones.update_grad(K)
+H1 = Hypatia.Cones.hess_prod!(zeros(T, K.dim), H, K)
+
 
 
 println("Gradient test (FDD=0): ", norm(0.5 * (g0 + g1) - ((f1 .- f0) ./ ϵ)))
 println("Gradient test (ID=nu): ", (-g0' * x0))
+
+println("Hessian test (ID=0): ",  norm(Hypatia.Cones.hess_prod!(zeros(T, K.dim), x0, K) + g0))
+println("Hessian test (ID=nu): ", dot(Hypatia.Cones.hess_prod!(zeros(T, K.dim), x0, K), x0))
+println("Hessian test (FDD=0): ", norm(0.5 * (H0 + H1) - ((g1 .- g0) ./ ϵ)))

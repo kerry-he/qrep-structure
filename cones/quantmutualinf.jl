@@ -51,12 +51,14 @@ mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
     z::T
 
     Δ2x_log::Matrix{T}
-    Δ2x_comb_inv::Matrix{T}
+    Δ2nx_log::Matrix{T}
+    Δ2ncx_log::Matrix{T}
+    Δ2x_comb::Matrix{T}
     Δ3x_log::Array{T, 3}
 
     DPhi::Vector{T}
 
-    HX::Matrix{T}
+    Hx::Matrix{T}
 
     hessprod_aux_updated::Bool
     invhessprod_aux_updated::Bool
@@ -131,10 +133,14 @@ function Hypatia.Cones.setup_extra_data!(
     cone.DPhi = zeros(T, cone.vni)
 
     cone.Δ2x_log = zeros(T, ni, ni)
-    cone.Δ2x_comb_inv = zeros(T, ni, ni)
+    cone.Δ2nx_log = zeros(T, no, no)
+    cone.Δ2ncx_log = zeros(T, ne, ne)
+    cone.Δ2x_comb = zeros(T, ni, ni)
     cone.Δ3x_log = zeros(T, ni, ni, ni)
 
-    cone.HX = zeros(T, ni, ni)
+    cone.Hx = zeros(T, ni, ni)
+    cone.Hnx = zeros(T, no, no)
+    cone.Hncx = zeros(T, ne, ne)
 
     return cone
 end
@@ -220,7 +226,6 @@ function Hypatia.Cones.update_grad(cone::QuantMutualInformation)
 
     zi = inv(cone.z)
     DPhi = log_X + N_log_NX - Nc_log_NcX - tr_log_trX
-    display(DPhi)
 
     g = cone.grad
     g[1] = -zi
@@ -235,6 +240,18 @@ function update_hessprod_aux(cone::QuantMutualInformation)
     @assert !cone.hessprod_aux_updated
     @assert cone.grad_updated
 
+    rt2 = cone.rt2
+    (Λx, Ux) = cone.X_fact
+    (Λnx, Unx) = cone.NX_fact
+    (Λncx, Uncx) = cone.NcX_fact
+
+    # Compute first divideded differences matrix
+    Δ2_log!(cone.Δ2x_log, Λx, cone.Λx_log)
+    Δ2_log!(cone.Δ2nx_log, Λnx, cone.Λnx_log)
+    Δ2_log!(cone.Δ2ncx_log, Λncx, cone.Λncx_log)
+
+    cone.Δ2x_comb = cone.Δ2x_log + cone.z / (Λx' * Λx)
+
     cone.hessprod_aux_updated = true
     return
 end
@@ -247,6 +264,43 @@ function Hypatia.Cones.hess_prod!(
 ) where {T <: Real}
     @assert cone.grad_updated
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
+
+    rt2 = cone.rt2
+    zi = 1 / cone.z
+
+    (Λx, Ux) = cone.X_fact
+    (Λnx, Unx) = cone.NX_fact
+    (Λncx, Uncx) = cone.NcX_fact
+
+    Hx = cone.Hx
+    Hnx = cone.Hnx
+    Hncx = cone.Hncx
+
+    @inbounds for j in 1:size(arr, 2)
+
+        # Get input direction
+        Ht = arr[1, j]
+        @views Hx_vec = arr[cone.X_idxs, j]
+        @views Hypatia.Cones.svec_to_smat!(Hx, Hx_vec, rt2)
+        @views Hypatia.Cones.svec_to_smat!(Hnx, cone.N * Hx_vec, rt2)
+        @views Hypatia.Cones.svec_to_smat!(Hncx, cone.Nc * Hx_vec, rt2)
+        LinearAlgebra.copytri!(Hx, 'U')
+        LinearAlgebra.copytri!(Hnx, 'U')
+        LinearAlgebra.copytri!(Hncx, 'U')
+
+        # Hessian product of quantum entropies
+        D2PhiH =             Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Ux * ( cone.Δ2x_comb .* (Ux' * Hx * Ux) ) * Ux, cone.rt2)
+        D2PhiH += cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), Unx * ( cone.Δ2nx_log .* (Unx' * Hnx * Unx) ) * Unx, cone.rt2)
+        D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* (Uncx' * Hncx * Uncx) ) * Uncx, cone.rt2)
+        D2PhiH -= cond.tr  * tr(Hx) / cone.trX
+
+        prodt = zi * zi * (Ht - dot(Hx_vec, DPhi))
+        prodX = -prodt * DPhi + zi * D2PhiH
+
+        prod[1, j] = chi
+        prod[cone.X_idxs, j] = prodX
+
+    end
 
     return prod
 end
