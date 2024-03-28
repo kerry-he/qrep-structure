@@ -59,6 +59,8 @@ mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
     DPhi::Vector{T}
 
     Hx::Matrix{T}
+    Hnx::Matrix{T}
+    Hncx::Matrix{T}
 
     hessprod_aux_updated::Bool
     invhessprod_aux_updated::Bool
@@ -250,7 +252,7 @@ function update_hessprod_aux(cone::QuantMutualInformation)
     Δ2_log!(cone.Δ2nx_log, Λnx, cone.Λnx_log)
     Δ2_log!(cone.Δ2ncx_log, Λncx, cone.Λncx_log)
 
-    cone.Δ2x_comb = cone.Δ2x_log + cone.z / (Λx' * Λx)
+    @. cone.Δ2x_comb = cone.Δ2x_log + cone.z / (Λx' * Λx)
 
     cone.hessprod_aux_updated = true
     return
@@ -292,12 +294,12 @@ function Hypatia.Cones.hess_prod!(
         D2PhiH =             Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Ux * ( cone.Δ2x_comb .* (Ux' * Hx * Ux) ) * Ux, cone.rt2)
         D2PhiH += cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), Unx * ( cone.Δ2nx_log .* (Unx' * Hnx * Unx) ) * Unx, cone.rt2)
         D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* (Uncx' * Hncx * Uncx) ) * Uncx, cone.rt2)
-        D2PhiH -= cond.tr  * tr(Hx) / cone.trX
+        D2PhiH -= cone.tr  * tr(Hx) / cone.trX
 
-        prodt = zi * zi * (Ht - dot(Hx_vec, DPhi))
-        prodX = -prodt * DPhi + zi * D2PhiH
+        prodt = zi * zi * (Ht - dot(Hx_vec, cone.DPhi))
+        prodX = -prodt * cone.DPhi + zi * D2PhiH
 
-        prod[1, j] = chi
+        prod[1, j] = prodt
         prod[cone.X_idxs, j] = prodX
 
     end
@@ -341,6 +343,32 @@ function Hypatia.Cones.dder3(cone::QuantMutualInformation{T}, dir::AbstractVecto
     cone.dder3_aux_updated || update_dder3_aux(cone)
 
     return dder3
+end
+
+#-----------------------------------------------------------------------------------------------------
+
+function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: Real}
+    rteps = sqrt(eps(T))
+    d = length(λ)
+
+    @inbounds for j in 1:d
+        λ_j = λ[j]
+        lλ_j = log_λ[j]
+        for i in 1:(j - 1)
+            λ_i = λ[i]
+            λ_ij = λ_i - λ_j
+            if abs(λ_ij) < rteps
+                Δ2[i, j] = 2 / (λ_i + λ_j)
+            else
+                Δ2[i, j] = (log_λ[i] - lλ_j) / λ_ij
+            end
+        end
+        Δ2[j, j] = inv(λ_j)
+    end
+
+    # make symmetric
+    LinearAlgebra.LinearAlgebra.LinearAlgebra.copytri!(Δ2, 'U')
+    return Δ2
 end
 
 function spectral_outer!(
