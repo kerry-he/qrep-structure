@@ -291,9 +291,9 @@ function Hypatia.Cones.hess_prod!(
         LinearAlgebra.copytri!(Hncx, 'U')
 
         # Hessian product of quantum entropies
-        D2PhiH =             Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Ux * ( cone.Δ2x_comb .* (Ux' * Hx * Ux) ) * Ux, cone.rt2)
-        D2PhiH += cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), Unx * ( cone.Δ2nx_log .* (Unx' * Hnx * Unx) ) * Unx, cone.rt2)
-        D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* (Uncx' * Hncx * Uncx) ) * Uncx, cone.rt2)
+        D2PhiH =             Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Ux * ( cone.Δ2x_comb .* (Ux' * Hx * Ux) ) * Ux', cone.rt2)
+        D2PhiH += cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), Unx * ( cone.Δ2nx_log .* (Unx' * Hnx * Unx) ) * Unx', cone.rt2)
+        D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* (Uncx' * Hncx * Uncx) ) * Uncx', cone.rt2)
         D2PhiH -= cone.tr  * tr(Hx) / cone.trX
 
         prodt = zi * zi * (Ht - dot(Hx_vec, cone.DPhi))
