@@ -55,8 +55,12 @@ mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
     Δ2ncx_log::Matrix{T}
     Δ2x_comb::Matrix{T}
     Δ3x_log::Array{T, 3}
+    Δ3nx_log::Array{T, 3}
+    Δ3ncx_log::Array{T, 3}
 
     DPhi::Vector{T}
+    hess::Matrix{T}
+    hess_fact::Cholesky{T, Matrix{T}}
 
     Hx::Matrix{T}
     Hnx::Matrix{T}
@@ -133,12 +137,15 @@ function Hypatia.Cones.setup_extra_data!(
     cone.NcX_log = zeros(T, ne, ne)
 
     cone.DPhi = zeros(T, cone.vni)
+    cone.hess = zeros(T, cone.vni, cone.vni)
 
     cone.Δ2x_log = zeros(T, ni, ni)
     cone.Δ2nx_log = zeros(T, no, no)
     cone.Δ2ncx_log = zeros(T, ne, ne)
     cone.Δ2x_comb = zeros(T, ni, ni)
     cone.Δ3x_log = zeros(T, ni, ni, ni)
+    cone.Δ3nx_log = zeros(T, no, no, no)
+    cone.Δ3ncx_log = zeros(T, ne, ne, ne)
 
     cone.Hx = zeros(T, ni, ni)
     cone.Hnx = zeros(T, no, no)
@@ -217,7 +224,6 @@ function Hypatia.Cones.update_grad(cone::QuantMutualInformation)
     rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
     Xi = cone.Xi
-    DPhi = cone.DPhi
 
     spectral_outer!(Xi, Ux, inv.(Λx), zeros(T, size(Xi)))
 
@@ -227,12 +233,12 @@ function Hypatia.Cones.update_grad(cone::QuantMutualInformation)
     tr_log_trX = cone.tr  * cone.trX_log
 
     zi = inv(cone.z)
-    DPhi = log_X + N_log_NX - Nc_log_NcX - tr_log_trX
+    cone.DPhi = log_X + N_log_NX - Nc_log_NcX - tr_log_trX
 
     g = cone.grad
     g[1] = -zi
     @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], -Xi, rt2)
-    g[cone.X_idxs] += zi * DPhi
+    g[cone.X_idxs] += zi * cone.DPhi
 
     cone.grad_updated = true
     return cone.grad
@@ -242,7 +248,6 @@ function update_hessprod_aux(cone::QuantMutualInformation)
     @assert !cone.hessprod_aux_updated
     @assert cone.grad_updated
 
-    rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
     (Λnx, Unx) = cone.NX_fact
     (Λncx, Uncx) = cone.NcX_fact
@@ -278,7 +283,7 @@ function Hypatia.Cones.hess_prod!(
     Hnx = cone.Hnx
     Hncx = cone.Hncx
 
-    @inbounds for j in 1:size(arr, 2)
+    @inbounds for j in axes(arr, 2)
 
         # Get input direction
         Ht = arr[1, j]
@@ -312,6 +317,51 @@ function update_invhessprod_aux(cone::QuantMutualInformation)
     @assert cone.grad_updated
     @assert cone.hessprod_aux_updated
 
+    rt2 = cone.rt2
+
+    (Λx, Ux) = cone.X_fact
+    (Λnx, Unx) = cone.NX_fact
+    (Λncx, Uncx) = cone.NcX_fact    
+
+    # Hessian for -S(X) component
+    k = 1
+    @inbounds for j in 1:cone.ni, i in 1:j
+        UHU = Ux[i, :] * Ux[j, :]'
+        if i != j
+            UHU = (UHU + UHU') / rt2
+        end
+        temp = Ux * (cone.Δ2x_comb .* UHU) * Ux'
+        @views Hypatia.Cones.smat_to_svec!(cone.hess[:, k], temp, cone.rt2)
+        k += 1
+    end
+
+    # Hessian for -S(N(X)) component
+    UUN = zeros(T, cone.vni, cone.vno)
+    @inbounds for k in axes(cone.N, 2)
+        H = Hypatia.Cones.svec_to_smat!(zeros(T, cone.no, cone.no), cone.N[:, k], cone.rt2)
+        LinearAlgebra.copytri!(H, 'U')
+        UHU = sqrt.(cone.Δ2nx_log) .* (Unx' * H * Unx)
+        @views Hypatia.Cones.smat_to_svec!(UUN[k, :], UHU, cone.rt2)
+    end
+    cone.hess += UUN * UUN'
+
+    # Hessian for +S(Nc(X)) component
+    UUNc = zeros(T, cone.vni, cone.vne)
+    @inbounds for k in axes(cone.Nc, 2)
+        H = Hypatia.Cones.svec_to_smat!(zeros(T, cone.ne, cone.ne), cone.Nc[:, k], cone.rt2)
+        LinearAlgebra.copytri!(H, 'U')
+        UHU = sqrt.(cone.Δ2ncx_log) .* (Uncx' * H * Uncx)
+        @views Hypatia.Cones.smat_to_svec!(UUNc[k, :], UHU, cone.rt2)
+    end
+    cone.hess -= UUNc * UUNc'
+
+    # Hessian for +S(tr[X]) component
+    cone.hess -= cone.tr * cone.tr' / cone.trX
+
+    # Rescale and factor Hessian
+    cone.hess /= cone.z
+    cone.hess_fact = cholesky(Hermitian(cone.hess))
+
     cone.invhessprod_aux_updated = true
     return
 end
@@ -325,6 +375,17 @@ function Hypatia.Cones.inv_hess_prod!(
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.invhessprod_aux_updated || update_invhessprod_aux(cone)
 
+    @inbounds for j in axes(arr, 2)
+
+        # Get input direction
+        Ht = arr[1, j]
+        @views Hx = arr[cone.X_idxs, j]
+
+        # Solve linear system
+        @views prod[cone.X_idxs, j] = cone.hess_fact \ (Hx + Ht*cone.DPhi)
+        prod[1, j] = cone.z * cone.z * Ht + dot(prod[cone.X_idxs, j], cone.DPhi)
+
+    end
         
     return prod
 end
@@ -332,6 +393,10 @@ end
 function update_dder3_aux(cone::QuantMutualInformation)
     @assert !cone.dder3_aux_updated
     @assert cone.hessprod_aux_updated
+
+    Δ3_log!(cone.Δ3x_log, cone.Δ2x_log, cone.X_fact.values)
+    Δ3_log!(cone.Δ3nx_log, cone.Δ2nx_log, cone.NX_fact.values)
+    Δ3_log!(cone.Δ3ncx_log, cone.Δ2ncx_log, cone.NcX_fact.values)
 
     cone.dder3_aux_updated = true
     return
@@ -341,6 +406,60 @@ function Hypatia.Cones.dder3(cone::QuantMutualInformation{T}, dir::AbstractVecto
     @assert cone.grad_updated
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.dder3_aux_updated || update_dder3_aux(cone)
+
+    rt2 = cone.rt2
+
+    (Λx, Ux) = cone.X_fact
+    (Λnx, Unx) = cone.NX_fact
+    (Λncx, Uncx) = cone.NcX_fact
+
+    Hx = cone.Hx
+    Hnx = cone.Hnx
+    Hncx = cone.Hncx
+
+    dder3 = cone.dder3
+
+    # Get input direction
+    Ht = dir[1]
+    @views Hx_vec = dir[cone.X_idxs]
+    @views Hypatia.Cones.svec_to_smat!(Hx, Hx_vec, rt2)
+    @views Hypatia.Cones.svec_to_smat!(Hnx, cone.N * Hx_vec, rt2)
+    @views Hypatia.Cones.svec_to_smat!(Hncx, cone.Nc * Hx_vec, rt2)
+    LinearAlgebra.copytri!(Hx, 'U')
+    LinearAlgebra.copytri!(Hnx, 'U')
+    LinearAlgebra.copytri!(Hncx, 'U')
+
+    UHUx   = Ux'   * Hx   * Ux
+    UHUnx  = Unx'  * Hnx  * Unx
+    UHUncx = Uncx' * Hncx * Uncx
+
+
+    # Derivatives of mutual information
+    D2PhiH =             Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Ux * ( cone.Δ2x_log .* UHUx ) * Ux', cone.rt2)
+    D2PhiH += cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), Unx * ( cone.Δ2nx_log .* UHUnx ) * Unx', cone.rt2)
+    D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* UHUncx ) * Uncx', cone.rt2)
+    D2PhiH -= cone.tr  * tr(Hx) / cone.trX
+
+    D3PhiHH =             Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), Δ2_frechet(UHUx .* cone.Δ3x_log, Ux, UHUx), cone.rt2)
+    D3PhiHH += cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), Δ2_frechet(UHUnx .* cone.Δ3nx_log, Unx, UHUnx), cone.rt2)
+    D3PhiHH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Δ2_frechet(UHUncx .* cone.Δ3ncx_log, Uncx, UHUncx), cone.rt2)
+    D3PhiHH += cone.tr  * (tr(Hx) / cone.trX)^2
+
+
+    # Third directional derivatives of the barrier function
+    DPhiH = dot(cone.DPhi, Hx_vec)
+    D2PhiHH = dot(D2PhiH, Hx_vec)
+    χ = Ht - DPhiH
+    zi = 1 / cone.z
+
+    @views dder3_X = dder3[cone.X_idxs]
+    dder3[1]  = -(2 * zi^3 * χ^2) - (zi^2 * D2PhiHH)
+    dder3_X  .= -dder3[1] * cone.DPhi
+    dder3_X .-= 2 * zi^2 * χ * D2PhiH
+    dder3_X .+= zi * D3PhiHH
+    dder3_X .-= Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), 2 * cone.Xi * Hx * cone.Xi * Hx * cone.Xi, cone.rt2)
+
+    @. dder3 *= -0.5    
 
     return dder3
 end
@@ -371,6 +490,50 @@ function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: 
     return Δ2
 end
 
+function Δ3_log!(Δ3::Array{T, 3}, Δ2::Matrix{T}, λ::Vector{T}) where {T <: Real}
+    @assert issymmetric(Δ2) # must be symmetric (wrapper is less efficient)
+    rteps = sqrt(eps(T))
+    d = length(λ)
+
+    @inbounds for k in 1:d, j in 1:k, i in 1:j
+        λ_j = λ[j]
+        λ_k = λ[k]
+        λ_jk = λ_j - λ_k
+        if abs(λ_jk) < rteps
+            λ_i = λ[i]
+            λ_ij = λ_i - λ_j
+            if abs(λ_ij) < rteps
+                t = abs2(3 / (λ_i + λ_j + λ_k)) / -2
+            else
+                t = (Δ2[i, j] - Δ2[j, k]) / λ_ij
+            end
+        else
+            t = (Δ2[i, j] - Δ2[i, k]) / λ_jk
+        end
+
+        Δ3[i, j, k] =
+            Δ3[i, k, j] = Δ3[j, i, k] = Δ3[j, k, i] = Δ3[k, i, j] = Δ3[k, j, i] = t
+    end
+
+    return Δ3
+end
+
+function Δ2_frechet(
+    S_Δ3::Array{T, 3}, 
+    U::Matrix{T}, 
+    UHU::Matrix{T}, 
+) where {T <: Real}
+    out = zeros(T, size(U))
+
+    @inbounds for k in axes(S_Δ3, 3)
+        @views out[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
+    end
+    out .*= 2;
+
+    return U * out * U'
+end
+
+
 function spectral_outer!(
     mat::AbstractMatrix{T},
     vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
@@ -392,3 +555,10 @@ function spectral_outer!(
     mul!(mat, temp, vecs')
     return mat
 end
+
+# function smat_to_svec(
+#     mat::AbstractMatrix{Complex{T}},
+#     rt2::Real,
+# ) where {T <: Real}
+#     return Hypatia.Cones.smat_to_svec!
+# end
