@@ -70,6 +70,9 @@ mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
     invhessprod_aux_updated::Bool
     dder3_aux_updated::Bool
 
+    vec1::Vector{T}
+    vec2::Vector{T}
+
     function QuantMutualInformation{T}(
         ni::Int,
         no::Int,
@@ -208,8 +211,6 @@ function Hypatia.Cones.update_feas(cone::QuantMutualInformation{T}) where {T <: 
             entr_trX = cone.trX * cone.trX_log
             
             cone.z = point[1] - (entr_X + entr_NX - entr_NcX - entr_trX)
-
-            cone.fval = -log(cone.z) - logdet(cone.X)
 
             cone.is_feas = (cone.z > 0)
         end

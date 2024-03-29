@@ -14,7 +14,7 @@ import Random
 
 T = Float64
 
-function qrd_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64)
+function qrd_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64) where {T <: Real}
     # Build quantum rate distortion problem
     #   min  S(B|BR)_X + S(Z)
     #   s.t. Tr_B[X] = Z

@@ -33,7 +33,7 @@ while true
     end
 end
 
-# H = randn(T, K.dim)
+H = randn(T, K.dim)
 x0 = copyto!(zeros(T, K.dim), K.point)
 f0 = K.fval
 g0 = copyto!(zeros(T, K.dim), Hypatia.Cones.update_grad(K))

@@ -33,11 +33,11 @@ function med_problem(L::Int)
 
     tr1 = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 1, (2, m)), N, m)
     trn = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 2, (m, 2)), N, m)
-    Id  = Cones.smat_to_svec!(zeros(sN), Matrix{T}(I, N, N), sqrt(2.))
+    tr  = Cones.smat_to_svec!(zeros(sN), Matrix{T}(I, N, N), sqrt(2.))
 
     # Build problem model
     A1 = hcat(zeros(sm, 1), tr1 - trn)          # Tr_1[X] == Tr_L[X]
-    A2 = hcat(0           , Id')                # tr[X] == 1
+    A2 = hcat(0           , tr')                # tr[X] == 1
     A3 = hcat(1           , zeros(1, sN))       # t == 0
     A  = vcat(A1[2:end, :], A2, A3)
 
@@ -72,10 +72,10 @@ function med_naive_problem(L::Int)
     tr1     = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 1, (2, m)), N, m)
     trn     = lin_to_mat(T, x -> pTr!(zeros(T, m, m), x, 2, (m, 2)), N, m)
     ikr_tr1 = lin_to_mat(T, x -> idKron!(zeros(T, N, N), pTr!(zeros(T, m, m), x, 1, (2, m)), 1, (2, m)), N, N)
-    Id      = Cones.smat_to_svec!(zeros(sN), Matrix{T}(I, N, N), sqrt(2.))
+    tr      = Cones.smat_to_svec!(zeros(sN), Matrix{T}(I, N, N), sqrt(2.))
 
     # Build problem model
-    A  = vcat((tr1 - trn)[2:end, :], Id')
+    A  = vcat((tr1 - trn)[2:end, :], tr')
 
     b = zeros(sm)
     b[end] = 1
