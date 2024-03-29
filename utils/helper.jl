@@ -104,7 +104,7 @@ end
 
 function randUnitary(R::Type, n::Int)
     # Random unitary uniformly distributed on Haar measure
-    # https://case.edu/artsci/math/esmeckes/Meckes_SAMSI_Lecture2.pdf
+    # See https://case.edu/artsci/math/esmeckes/Meckes_SAMSI_Lecture2.pdf
     X = randn(R, n, n)
     U, _ = qr(X)
     return U
@@ -112,9 +112,40 @@ end
 
 function randStinespringOperator(R::Type, nin::Int, nout::Int, nenv::Int)
     # Random Stinespring operator uniformly distributed on Hilbert-Schmidt measure
-    # https://arxiv.org/abs/2011.02994
+    # See https://arxiv.org/abs/2011.02994
     U = randUnitary(R, nout * nenv)
     return U[:, 1:nin]
+end
+
+function randDegradableChannel(R::Type, nin::Int, nout::Int, nenv::Int)
+    # Random degradable channel, represented as a Stinespring isometry
+    # Returns both Stinespring isometry V such that
+    #     N(X)  = Tr_2[VXV']
+    #     Nc(X) = Tr_1[VXV']
+    # Also returns Stinespring isometry W such that
+    #     Nc(X) = Tr_2[WN(X)W']
+    # See https://arxiv.org/abs/0802.1360
+
+    @assert nenv <= nin
+
+    V = zeros(T, nout*nenv, nin)    # N Stinespring isometry
+    W = zeros(T, nin*nenv, nout)    # Ξ Stinespring isometry
+
+    U = randUnitary(R, nin)
+    for k in 1:nout
+        # Generate random vector
+        v = randn(R, nenv)
+        v /= norm(v)
+
+        # Make Kraus operator and insert into N Stinespring isometry
+        K = v * U[k, :]'
+        @views V[(k - 1)*nenv + 1:k*nenv, :] = K
+
+        # Make Kraus operator and insert into Ξ Stinespring isometry
+        @views W[k:nin:end, k] = v
+    end
+
+    return V, W
 end
 
 function purify(rho::Matrix{Hypatia.RealOrComplex{T}}) where {T <: Real}

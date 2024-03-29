@@ -22,8 +22,6 @@ function eacc_problem(ni::Int, no::Int, ne::Int, V::Matrix{T}) where {T <: Real}
     #        X ⪰ 0
 
     vni = Cones.svec_length(ni)
-    vno = Cones.svec_length(no)
-    vne = Cones.svec_length(ne)
 
     tr = Cones.smat_to_svec!(zeros(T, vni), Matrix{T}(I, ni, ni), sqrt(2.))
     

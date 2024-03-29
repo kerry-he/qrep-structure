@@ -290,7 +290,7 @@ function Hypatia.Cones.hess_prod!(
         D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* (Uncx' * Hncx * Uncx) ) * Uncx', cone.rt2)
 
         prodt = zi * zi * (Ht - dot(Hx_vec, cone.DPhi))
-        prodX = -prodt * cone.DPhi + zi * D2PhiH + cone.Xi * Hx * cone.Xi
+        prodX = -prodt * cone.DPhi + zi * D2PhiH + Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), cone.Xi * Hx * cone.Xi, cone.rt2)
 
         prod[1, j] = prodt
         prod[cone.X_idxs, j] = prodX

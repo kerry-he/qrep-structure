@@ -3,6 +3,7 @@ import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
 
+include("cones/quantcoherentinf.jl")
 include("cones/quantmutualinf.jl")
 include("utils/helper.jl")
 
@@ -10,11 +11,15 @@ T = Float64
 
 ϵ = 1e-8
 ni = 4
-no = 4
-ne = 4
-V = randStinespringOperator(T, ni, no, ne)
+no = 3
+ne = 2
+V = randEBChannel(T, ni, no, ne)
 
-K = QuantMutualInformation{T}(ni, no, ne, V)
+N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
+Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
+
+K = QuantCoherentInformation{T}(ni, no, ne, N, Nc)
+# K = QuantMutualInformation{T}(ni, no, ne, V)
 Cones.setup_extra_data!(K)
 K.point = Cones.set_initial_point!(zeros(T, K.dim), K)
 K.grad = zeros(T, K.dim)
