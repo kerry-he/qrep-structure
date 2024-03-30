@@ -3,6 +3,7 @@ import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
 
+include("cones/quantratedist.jl")
 include("cones/quantcoherentinf.jl")
 include("cones/quantmutualinf.jl")
 include("utils/helper.jl")
@@ -13,12 +14,13 @@ T = Float64
 ni = 4
 no = 3
 ne = 2
-V = randEBChannel(T, ni, no, ne)
+# V = randEBChannel(T, ni, no, ne)
 
-N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
-Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
+# N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
+# Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
 
-K = QuantCoherentInformation{T}(ni, no, ne, N, Nc)
+K = QuantRateDistortion{T}(ni)
+# K = QuantCoherentInformation{T}(ni, no, ne, N, Nc)
 # K = QuantMutualInformation{T}(ni, no, ne, V)
 Cones.setup_extra_data!(K)
 K.point = Cones.set_initial_point!(zeros(T, K.dim), K)

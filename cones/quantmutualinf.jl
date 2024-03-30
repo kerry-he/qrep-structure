@@ -376,6 +376,8 @@ function Hypatia.Cones.inv_hess_prod!(
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.invhessprod_aux_updated || update_invhessprod_aux(cone)
 
+    Hx = cone.Hx
+
     @inbounds for j in axes(arr, 2)
 
         # Get input direction
