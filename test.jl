@@ -2,24 +2,33 @@ using LinearAlgebra
 import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
+import MAT
 
+include("cones/quantkeyrate.jl")
 include("cones/quantratedist.jl")
 include("cones/quantcoherentinf.jl")
 include("cones/quantmutualinf.jl")
 include("utils/helper.jl")
 
 T = Float64
+R = Complex{T}
+
+f = MAT.matopen("data/dprBB84_1_02_15.mat")
+data = MAT.read(f, "Data")
+K_list = convert(Vector{Matrix{T}}, data["Klist"][:])
+Z_list = convert(Vector{Matrix{T}}, data["Zlist"][:])
 
 ϵ = 1e-8
-ni = 4
-no = 3
-ne = 2
+# ni = 4
+# no = 3
+# ne = 2
 # V = randEBChannel(T, ni, no, ne)
 
 # N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
 # Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
 
-K = QuantRateDistortion{T}(ni)
+K = QuantKeyRate{T, R}(K_list, Z_list)
+# K = QuantRateDistortion{T}(ni)
 # K = QuantCoherentInformation{T}(ni, no, ne, N, Nc)
 # K = QuantMutualInformation{T}(ni, no, ne, V)
 Cones.setup_extra_data!(K)
@@ -33,6 +42,7 @@ Hypatia.Cones.update_feas(K)
 while true
     Cones.reset_data(K)
     point = randn(T, K.dim)
+    @views Hypatia.Cones.smat_to_svec!(point[2:end], randDensityMatrix(R, K.ni), sqrt(2.))
     Hypatia.Cones.load_point(K, point)
     
     if Hypatia.Cones.update_feas(K)
@@ -40,7 +50,7 @@ while true
     end
 end
 
-H = randn(T, K.dim)
+# H = randn(T, K.dim)
 x0 = copyto!(zeros(T, K.dim), K.point)
 f0 = K.fval
 g0 = copyto!(zeros(T, K.dim), Hypatia.Cones.update_grad(K))

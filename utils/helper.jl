@@ -21,15 +21,14 @@ function lin_to_mat(
 
     for k in 1:vni
         # Get directional vector
-        @views mat_k = mat[:, k]
         H = zeros(vni)
         H[k] = 1.
         Hypatia.Cones.svec_to_smat!(H_mat, H, rt2)
-        LinearAlgebra.copytri!(H_mat, 'U')
+        LinearAlgebra.copytri!(H_mat, 'U', true)
 
         # Get column of matrix
         A_H = A(H_mat)
-        Hypatia.Cones.smat_to_svec!(mat_k, A_H, rt2)
+        @views Hypatia.Cones.smat_to_svec!(mat[:, k], A_H, rt2)
     end
 
     return mat
@@ -170,7 +169,7 @@ function purify(λ::Vector{T}) where {T <: Real}
 end
 
 function entr(X::Matrix)
-    λ = eigvals(X)
+    λ = eigvals(Hermitian(X, :U))
     λ = λ[λ .> 0]
     return sum(λ .* log.(λ))
 end
