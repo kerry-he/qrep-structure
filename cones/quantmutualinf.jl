@@ -377,19 +377,12 @@ function Hypatia.Cones.inv_hess_prod!(
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.invhessprod_aux_updated || update_invhessprod_aux(cone)
 
-    Hx = cone.Hx
+    Ht = arr[1, :]
+    Hx = arr[cone.X_idxs, :]
+    Wx = Hx + cone.DPhi * Ht'
 
-    @inbounds for j in axes(arr, 2)
-
-        # Get input direction
-        Ht = arr[1, j]
-        @views Hx = arr[cone.X_idxs, j]
-
-        # Solve linear system
-        @views prod[cone.X_idxs, j] = cone.hess_fact \ (Hx + Ht*cone.DPhi)
-        prod[1, j] = cone.z * cone.z * Ht + dot(prod[cone.X_idxs, j], cone.DPhi)
-
-    end
+    prod[cone.X_idxs, :] .= cone.hess_fact \ Wx
+    prod[1, :] = cone.z * cone.z * Ht + prod[cone.X_idxs, :]' * cone.DPhi
         
     return prod
 end

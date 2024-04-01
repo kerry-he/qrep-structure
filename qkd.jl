@@ -64,7 +64,7 @@ function qkd_naive_problem(
     vni = Cones.svec_length(R, ni)
 
     ZK_list = [Z * K for K in K_list for Z in Z_list]
-    ZK_list_fr, K_list_fr = facial_reduction(ZK_list, K_list)
+    ZK_list_fr, K_list_fr = facial_reduction(ZK_list, K2_list=K_list)
     no = size(K_list_fr[1], 1)
     vno = Cones.svec_length(R, no)
 

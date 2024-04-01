@@ -19,8 +19,8 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
     ZK_mat_idx::Vector{Vector{Int}}
     K_vec_idx::Vector{Vector{Int}}
     ZK_vec_idx::Vector{Vector{Int}}
-    K_v::Vector{R}
-    ZK_v::Vector{R}
+    K_v::Vector{T}
+    ZK_v::Vector{T}
     Z_mat_idx::Vector{Vector{Int}}
     Z_vec_idx::Vector{Vector{Int}}
     M::Matrix{T}
@@ -75,7 +75,13 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
     hess::Matrix{T}
     hess_fact
 
+    temp1::Matrix{T}
+    temp2::Matrix{T}    
+
     Hx::Matrix{R}
+
+    temp_K_blk::Vector{Matrix{T}}
+    temp_ZK_blk::Vector{Matrix{T}}
 
     hessprod_aux_updated::Bool
     invhessprod_aux_updated::Bool
@@ -175,6 +181,37 @@ function Hypatia.Cones.setup_extra_data!(
     cone.hess = zeros(T, cone.vni, cone.vni)
 
     cone.Hx = zeros(T, ni, ni)
+
+    # Temporary matrices
+    if cone.protocol == "dprBB84"
+        cone.temp_K_blk = Vector{Matrix{T}}[]
+        for K_list in cone.K_list_blk
+            n = size(K_list[1], 1)
+            vn  = Hypatia.Cones.svec_length(R, n)
+            push!(cone.temp_K_blk, zeros(T, vn, vn))
+        end
+        cone.temp_ZK_blk = Vector{Matrix{T}}[]
+        for ZK_list in cone.ZK_list_blk
+            n = size(ZK_list[1], 1)
+            vn  = Hypatia.Cones.svec_length(R, n)
+            push!(cone.temp_ZK_blk, zeros(T, vn, vn))
+        end
+    else
+        cone.temp_K_blk = Vector{Matrix{T}}[]
+        for K_list in cone.K_list_blk
+            (n, m) = size(K_list[1])
+            vn  = Hypatia.Cones.svec_length(R, n)
+            vm  = Hypatia.Cones.svec_length(R, m)
+            push!(cone.temp_K_blk, zeros(T, vm, vn))
+        end
+        cone.temp_ZK_blk = Vector{Matrix{T}}[]
+        for ZK_list in cone.ZK_list_blk
+            (n, m) = size(ZK_list[1])
+            vn  = Hypatia.Cones.svec_length(R, n)
+            vm  = Hypatia.Cones.svec_length(R, m)
+            push!(cone.temp_ZK_blk, zeros(T, vm, vn))
+        end    
+    end
 
     # Things for dprBB84
     if cone.protocol == "dprBB84"
@@ -352,12 +389,12 @@ function update_invhessprod_aux(cone::QuantKeyRate)
         Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
 
         # Default computation of QKD Hessian
-        cone.hess  .= kronecker_matrix(cone.Xi)
-        for (U, D1, K_list) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk)
-            cone.hess .+= frechet_matrix_alt(U, D1, K_list) * zi
+        kronecker_matrix!(cone.hess, cone.Xi)
+        for (U, D1, K_list, temp) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk, cone.temp_K_blk)
+            frechet_matrix!(cone.hess, U, D1, temp, zi, K_list)
         end
-        for (U, D1, K_list) in zip(Uzgx_blk, cone.Δ2zgx_log_blk, cone.ZK_list_blk)
-            cone.hess .-= frechet_matrix_alt(U, D1, K_list) * zi
+        for (U, D1, K_list, temp) in zip(Uzgx_blk, cone.Δ2zgx_log_blk, cone.ZK_list_blk, cone.temp_ZK_blk)
+            frechet_matrix!(cone.hess, U, D1, temp, -zi, K_list)
         end    
 
         # Rescale and factor Hessian
@@ -390,23 +427,30 @@ function update_invhessprod_dprBB84_aux(cone::QuantKeyRate)
     X11 = cone.X[cone.K_mat_idx[2], cone.K_mat_idx[2]]
     
     small_XX = zeros(nK * 2, nK * 2)
-    small_XX[   1:nK ,    1:nK]  = kronecker_matrix(X00)
-    small_XX[nK+1:end, nK+1:end] = kronecker_matrix(X11)
-    small_XX[nK+1:end,    1:nK]  = kronecker_matrix(X01)
-    small_XX[   1:nK , nK+1:end] = small_XX[nK+1:end, 1:nK]'
+    @views kronecker_matrix!(small_XX[   1:nK ,    1:nK],  X00)
+    @views kronecker_matrix!(small_XX[nK+1:end, nK+1:end], X11)
+    @views kronecker_matrix!(small_XX[nK+1:end,    1:nK],  X01)
+    small_XX[1:nK, nK+1:end] = small_XX[nK+1:end, 1:nK]'
 
 
     # Default computation of QKD Hessian
     @views M1 = cone.M[1:nK, 1:nK]
     @views M2 = cone.M[nK+1:end, nK+1:end]
 
-    M1 .= frechet_matrix_alt(Ugx_blk[1], cone.Δ2gx_log_blk[1]) * (zi * cone.K_v[1]^4)
-    M2 .= frechet_matrix_alt(Ugx_blk[2], cone.Δ2gx_log_blk[2]) * (zi * cone.K_v[2]^4)
+    @views M11 = M1[cone.Z_vec_idx[1], cone.Z_vec_idx[1]]
+    @views M12 = M1[cone.Z_vec_idx[2], cone.Z_vec_idx[2]]
+    @views M21 = M2[cone.Z_vec_idx[1], cone.Z_vec_idx[1]]
+    @views M22 = M2[cone.Z_vec_idx[2], cone.Z_vec_idx[2]]
 
-    M1[cone.Z_vec_idx[1], cone.Z_vec_idx[1]] .-= frechet_matrix_alt(Uzgx_blk[1], cone.Δ2zgx_log_blk[1]) * (zi * cone.ZK_v[1]^4)
-    M1[cone.Z_vec_idx[2], cone.Z_vec_idx[2]] .-= frechet_matrix_alt(Uzgx_blk[2], cone.Δ2zgx_log_blk[2]) * (zi * cone.ZK_v[2]^4)
-    M2[cone.Z_vec_idx[1], cone.Z_vec_idx[1]] .-= frechet_matrix_alt(Uzgx_blk[3], cone.Δ2zgx_log_blk[3]) * (zi * cone.ZK_v[3]^4)
-    M2[cone.Z_vec_idx[2], cone.Z_vec_idx[2]] .-= frechet_matrix_alt(Uzgx_blk[4], cone.Δ2zgx_log_blk[4]) * (zi * cone.ZK_v[4]^4)
+    M1 .= M2 .= 0
+
+    frechet_matrix!(M1, Ugx_blk[1], cone.Δ2gx_log_blk[1], cone.temp_K_blk[1], zi * cone.K_v[1]^4)
+    frechet_matrix!(M2, Ugx_blk[2], cone.Δ2gx_log_blk[2], cone.temp_K_blk[2], zi * cone.K_v[2]^4)
+
+    frechet_matrix!(M11, Uzgx_blk[1], cone.Δ2zgx_log_blk[1], cone.temp_ZK_blk[1], -zi * cone.ZK_v[1]^4)
+    frechet_matrix!(M12, Uzgx_blk[2], cone.Δ2zgx_log_blk[2], cone.temp_ZK_blk[2], -zi * cone.ZK_v[2]^4)
+    frechet_matrix!(M21, Uzgx_blk[3], cone.Δ2zgx_log_blk[3], cone.temp_ZK_blk[3], -zi * cone.ZK_v[3]^4)
+    frechet_matrix!(M22, Uzgx_blk[4], cone.Δ2zgx_log_blk[4], cone.temp_ZK_blk[4], -zi * cone.ZK_v[4]^4)
 
     # Rescale and factor Hessian
     mul!(cone.schur, cone.M, small_XX)
@@ -432,17 +476,12 @@ function Hypatia.Cones.inv_hess_prod!(
 
     else
 
-        @inbounds for j in axes(arr, 2)
+        Ht = arr[1, :]
+        Hx = arr[cone.X_idxs, :]
+        Wx = Hx .+ cone.DPhi * Ht'
 
-            # Get input direction
-            Ht = arr[1, j]
-            @views Hx = arr[cone.X_idxs, j]
-    
-            # Solve linear system
-            @views prod[cone.X_idxs, j] = cone.hess_fact \ (Hx + Ht*cone.DPhi)
-            prod[1, j] = cone.z * cone.z * Ht + dot(prod[cone.X_idxs, j], cone.DPhi)
-    
-        end
+        prod[cone.X_idxs, :] .= cone.hess_fact \ Wx
+        prod[1, :] = cone.z * cone.z * Ht + prod[cone.X_idxs, :]' * cone.DPhi
 
         return prod
 
@@ -649,97 +688,79 @@ function congr(x, K_list, adjoint = false)
     end
 end
 
-function frechet_matrix(U::Matrix{R}, D1::Matrix{T}, K_list=nothing) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
-    # Build matrix corresponding to linear map H -> U @ [D1 * (U' @ H @ U)] @ U'
-    KU_list = isnothing(K_list) ? [U] : [K' * U for K in K_list]
-    
-    n   = size(KU_list[1], 1)
-    vn  = Hypatia.Cones.svec_length(R, n)
-    rt2 = sqrt(2.)
-    out = zeros(T, vn, vn)
-
-    k = 1
-    @inbounds for j in 1:n
-        @inbounds for i in 1:j-1
-            UHU = sum([KU'[:, i] * transpose(KU[j, :]) for KU in KU_list]) / rt2
-            D_H = congr(D1 .* UHU, KU_list)
-            @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
-            k += 1
-
-            if R == Complex{T}
-                D_H *= -1im
-                @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
-                k += 1
-            end
-        end
-
-        UHU = sum([KU'[:, j] * transpose(KU[j, :]) for KU in KU_list])
-        D_H = congr(D1 .* UHU, KU_list)
-        @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H, rt2)
-        k += 1
-    end
-
-    return out
-end
-
-
-function frechet_matrix_alt(U::Matrix{R}, D1::Matrix{T}, K_list=nothing) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
+function frechet_matrix!(
+    out::AbstractMatrix{T}, 
+    U::Matrix{R}, 
+    D1::Matrix{T}, 
+    temp::Matrix{T}, 
+    c::T,
+    K_list=nothing
+) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build matrix corresponding to linear map H -> U @ [D1 * (U' @ H @ U)] @ U'
     KU_list = isnothing(K_list) ? [U] : [K' * U for K in K_list]
     D1_rt2 = sqrt.(D1)
     
     (n, m) = size(KU_list[1])
-    vn  = Hypatia.Cones.svec_length(R, n)
-    vm  = Hypatia.Cones.svec_length(R, m)
     rt2 = sqrt(2.)
-    out = zeros(T, vm, vn)
+
+    UHU = zeros(R, m, m)
 
     k = 1
     @inbounds for j in 1:n
         @inbounds for i in 1:j-1
-            UHU = sum([KU'[:, i] * transpose(KU[j, :]) for KU in KU_list]) / rt2
-            D_H = D1_rt2 .* UHU
-            @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
+            UHU .= 0
+            for KU in KU_list
+                mul!(UHU, KU'[:, i], transpose(KU[j, :]), true, true)
+            end
+            UHU ./= rt2
+            UHU .*= D1_rt2
+            @views Hypatia.Cones.smat_to_svec!(temp[k, :], UHU .+ UHU', rt2)
             k += 1
 
             if R == Complex{T}
-                D_H *= -1im
-                @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
+                @. UHU *= -1im
+                @views Hypatia.Cones.smat_to_svec!(temp[k, :], UHU .+ UHU', rt2)
                 k += 1
             end
         end
 
-        UHU = sum([KU'[:, j] * transpose(KU[j, :]) for KU in KU_list])
-        D_H = D1_rt2 .* UHU
-        @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H, rt2)
+        UHU .= 0
+        for KU in KU_list
+            mul!(UHU, KU'[:, j], transpose(KU[j, :]), true, true)
+        end
+        UHU .*= D1_rt2
+        @views Hypatia.Cones.smat_to_svec!(temp[k, :], UHU, rt2)
         k += 1
     end
 
-    return out' * out
+    return mul!(out, temp, temp', c, true)
 end
 
-function kronecker_matrix(X::Matrix{R}) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
+function kronecker_matrix!(
+    out::AbstractMatrix{T},
+    X::Matrix{R},
+) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build matrix corresponding to linear map H -> X H X'
     n   = size(X, 1)
-    vn  = Hypatia.Cones.svec_length(R, n)
     rt2 = sqrt(2.)
-    out = zeros(T, vn, vn)
+
+    temp = zeros(R, n, n)
 
     k = 1
     @inbounds for j in 1:n
         @inbounds for i in 1:j-1
-            temp = X[:, i] * transpose(X'[j, :]) / rt2
-            @views Hypatia.Cones.smat_to_svec!(out[:, k], temp + temp', rt2)
+            mul!(temp, X[:, i] ./ rt2, transpose(X'[j, :]))
+            @views Hypatia.Cones.smat_to_svec!(out[:, k], temp .+ temp', rt2)
             k += 1
 
             if R == Complex{T}
-                temp *= -1im
-                @views Hypatia.Cones.smat_to_svec!(out[:, k], temp + temp', rt2)
+                @. temp *= -1im
+                @views Hypatia.Cones.smat_to_svec!(out[:, k], temp .+ temp', rt2)
                 k += 1
             end
         end
 
-        temp = temp = X[:, j] * transpose(X'[j, :])
+        mul!(temp, X[:, j], transpose(X'[j, :]))
         @views Hypatia.Cones.smat_to_svec!(out[:, k], temp, rt2)
         k += 1
     end

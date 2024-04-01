@@ -181,7 +181,7 @@ end
 
 function facial_reduction(
     K_list::Vector{Matrix{R}};
-    K2_list::Union{Vector{Matrix{R}}, Nothing} = nothing
+    K2_list::Union{Vector{Matrix{R}}, Nothing} = nothing,
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # For a set of Kraus operators i.e., SUM_i K_i @ X @ K_i.T, returns a set of
     # Kraus operators which preserves positive definiteness
@@ -196,7 +196,11 @@ function facial_reduction(
     nk_fr = sum(KKnzidx)
 
     if nk == nk_fr
-        return K_list
+        if isnothing(K2_list)
+            return K_list
+        else
+            return K_list, K2_list
+        end
     end
     
     # Perform facial reduction
