@@ -488,25 +488,21 @@ function Δ3!(Δ3::Array{T, 3}, Δ2::Matrix{T}, λ::Vector{T}) where {T <: Real}
     return Δ3
 end
 
-function Δ2_frechet!(
-    Δ2_F::Matrix{T}, 
+function Δ2_frechet(
     S_Δ3::Array{T, 3}, 
     U::Matrix{T}, 
     UHU::Matrix{T}, 
-    mat::Matrix{T}, 
-    mat2::Matrix{T}
 ) where {T <: Real}
-    n = size(U, 1);
+    out = zeros(T, size(U))
 
-    @inbounds for k = 1:n
-        @views mat[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
+    @inbounds for k in axes(S_Δ3, 3)
+        @views out[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
     end
-    mat .*= 2;
-    spectral_outer!(Δ2_F, U, mat, mat2)
-    # spectral_outer!(Δ2_F, U, Symmetric(mat, :U), mat2)
+    out .*= 2;
 
-    return Δ2_F
+    return U * out * U'
 end
+
 
 function spectral_outer!(
     mat::AbstractMatrix{T},
