@@ -52,7 +52,7 @@ mutable struct QuantRateDistortion{T <: Real} <: Hypatia.Cones.Cone{T}
     DPhiX::Matrix{T}
     DPhiy::Vector{T}
     schur::Matrix{T}
-    schur_fact::Cholesky{T, Matrix{T}}
+    schur_fact
 
     Hx::Matrix{T}
     Hy::Vector{T}
@@ -283,7 +283,8 @@ function update_invhessprod_aux(cone::QuantRateDistortion)
     cone.schur -= diagm(reshape(sum(reshape(cone.Δ2y_comb_inv', (cone.n, cone.n-1)), dims=2), (cone.n)))
     cone.schur += diagm(cone.w / zi)
     
-    cone.schur_fact = cholesky(Hermitian(cone.schur))
+    sym_hess = Symmetric(cone.schur, :U)
+    cone.schur_fact = Hypatia.Cones.posdef_fact_copy!(zero(sym_hess), sym_hess)    
 
     cone.invhessprod_aux_updated = true
     return

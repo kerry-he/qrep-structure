@@ -178,3 +178,36 @@ function entr(λ::Vector{T}) where {T <: Real}
     λ = λ[λ .> 0]
     return sum(λ .* log.(λ))
 end
+
+function facial_reduction(
+    K_list::Vector{Matrix{R}};
+    K2_list::Union{Vector{Matrix{R}}, Nothing} = nothing
+) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
+    # For a set of Kraus operators i.e., SUM_i K_i @ X @ K_i.T, returns a set of
+    # Kraus operators which preserves positive definiteness
+    nk = size(K_list[1], 1)
+
+    # Pass identity matrix (maximally mixed state) through the Kraus operators
+    KK = sum([K * K' for K in K_list])
+
+    # Determine if output is low rank, in which case we need to perform facial reduction
+    Dkk, Ukk = eigen(Hermitian(KK, :U))
+    KKnzidx = Dkk .> 1e-12
+    nk_fr = sum(KKnzidx)
+
+    if nk == nk_fr
+        return K_list
+    end
+    
+    # Perform facial reduction
+    Qkk = Ukk[:, KKnzidx]
+    K_list_fr = [Qkk' * K for K in K_list]
+    
+    if isnothing(K2_list)
+        return K_list_fr
+    else
+        # Do simultaneous facial reduction if second argument is provided
+        K2_list_fr = [Qkk' * K for K in K2_list]
+        return K_list_fr, K2_list_fr
+    end
+end

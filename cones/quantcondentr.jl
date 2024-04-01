@@ -458,7 +458,8 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
     mul!(KHxK, UxK', UxK_temp)
     @. HYY_KHxK = HYY - KHxK;
 
-    cone.HYY_KHxK_chol = cholesky(Hermitian(HYY_KHxK))
+    sym_hess = Symmetric(HYY_KHxK, :U)
+    cone.HYY_KHxK_chol = Hypatia.Cones.posdef_fact_copy!(zero(sym_hess), sym_hess)    
 
     cone.invhessprod_aux_updated = true
     return

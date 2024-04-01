@@ -93,7 +93,7 @@ function med_naive_problem(L::Int)
 end
 
 function main()
-    L = 6
+    L = 3
 
     model = med_problem(L)
     solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{T}())

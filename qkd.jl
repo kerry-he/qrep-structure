@@ -20,7 +20,8 @@ function qkd_problem(
     K_list::Vector{Matrix{R}},
     Z_list::Vector{Matrix{T}},
     Γ::Vector{Matrix{R}},
-    γ::Vector{T}
+    γ::Vector{T},
+    protocol::Union{String, Nothing} = nothing
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build quantum rate distortion problem
     #   min  S( G(X) || Z(G(X)) )
@@ -42,14 +43,14 @@ function qkd_problem(
     G = -one(T) * I
     h = zeros(T, 1 + vni)
 
-    cones = [QuantKeyRate{T, R}(K_list, Z_list)]
+    cones = [QuantKeyRate{T, R}(K_list, Z_list, protocol)]
 
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 end
 
 function qkd_naive_problem(
     K_list::Vector{Matrix{R}},
-    ZK_list::Vector{Matrix{R}},
+    Z_list::Vector{Matrix{R}},
     Γ::Vector{Matrix{R}},
     γ::Vector{T}
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
@@ -58,13 +59,17 @@ function qkd_naive_problem(
     #   s.t. A(X) = b
     #        X ⪰ 0
 
-    (no, ni)  = size(K_list[1])    # Input dimension
+    ni  = size(K_list[1], 2)    # Input dimension
     nc  = size(γ, 1)
     vni = Cones.svec_length(R, ni)
+
+    ZK_list = [Z * K for K in K_list for Z in Z_list]
+    ZK_list_fr, K_list_fr = facial_reduction(ZK_list, K_list)
+    no = size(K_list_fr[1], 1)
     vno = Cones.svec_length(R, no)
 
-    K_op  = lin_to_mat(R, x -> sum([K * x * K' for K in K_list]), ni, no)
-    ZK_op = lin_to_mat(R, x -> sum([ZK * x * ZK' for ZK in ZK_list]), ni, no)
+    K_op  = lin_to_mat(R, x -> sum([K * x * K' for K in K_list_fr]), ni, no)
+    ZK_op = lin_to_mat(R, x -> sum([ZK * x * ZK' for ZK in ZK_list_fr]), ni, no)
     Γ_op  = reduce(hcat, [Hypatia.Cones.smat_to_svec!(zeros(T, vni), convert(Matrix{R}, G), sqrt(2.)) for G in Γ])'
 
     # Build problem model
@@ -88,7 +93,8 @@ end
 
 function main()
     # Define rate distortion problem with entanglement fidelity distortion
-    f = MAT.matopen("data/DMCV_11_60_05_35.mat")
+    # f = MAT.matopen("data/DMCV_10_60_05_35.mat")
+    f = MAT.matopen("data/dprBB84_4_02_15.mat")
     data = MAT.read(f, "Data")
 
     if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma_fr"][:]) == 0)
@@ -102,29 +108,42 @@ function main()
     Γ = convert(Vector{Matrix{R}}, data["Gamma_fr"][:])
     γ = convert(Vector{T}, data["gamma_fr"][:])
 
-    model = qkd_problem(K_list, Z_list, Γ, γ)
+    # Use specialized dprBB4 oracle
+    model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
     solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
+    println("Now using specialized dprBB84 cone oracle")
     println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
 
+    # Use specialized QKD oracle with block diagonalization
+    model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84_naive")
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    println("Now using specialized QKD cone oracle")
+    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
 
-    K_list = convert(Vector{Matrix{R}}, data["Klist_fr"][:])
-    ZK_list = convert(Vector{Matrix{R}}, data["ZKlist_fr"][:])
+    # Use generic QKD oracle without block diagonalization
+    model = qkd_problem(K_list, Z_list, Γ, γ, "naive")
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    println("Now using generic QKD cone oracle")
+    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)    
+
+    # Use generic QRD oracle
+    K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
+    Z_list = convert(Vector{Matrix{R}}, data["Zlist"][:])
     Γ = convert(Vector{Matrix{R}}, data["Gamma_fr"][:])
     γ = convert(Vector{T}, data["gamma_fr"][:])
 
-    model = qkd_naive_problem(K_list, ZK_list, Γ, γ)
+    model = qkd_naive_problem(K_list, Z_list, Γ, γ)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
+    println("Now using generic QRE cone oracle")
     println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))    
 end
 
 main()

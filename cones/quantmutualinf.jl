@@ -60,7 +60,7 @@ mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
 
     DPhi::Vector{T}
     hess::Matrix{T}
-    hess_fact::Cholesky{T, Matrix{T}}
+    hess_fact
 
     Hx::Matrix{T}
     Hnx::Matrix{T}
@@ -361,7 +361,8 @@ function update_invhessprod_aux(cone::QuantMutualInformation)
 
     # Rescale and factor Hessian
     cone.hess /= cone.z
-    cone.hess_fact = cholesky(Hermitian(cone.hess))
+    sym_hess = Symmetric(cone.hess, :U)
+    cone.hess_fact = Hypatia.Cones.posdef_fact_copy!(zero(sym_hess), sym_hess)    
 
     cone.invhessprod_aux_updated = true
     return

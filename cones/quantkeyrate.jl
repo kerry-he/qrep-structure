@@ -14,6 +14,19 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
     ZK_list_blk::Vector{Vector{Matrix{R}}}
     protocol::Union{String, Nothing}
 
+    # Additional variables for dprBB84 protocol
+    K_mat_idx::Vector{Vector{Int}}
+    ZK_mat_idx::Vector{Vector{Int}}
+    K_vec_idx::Vector{Vector{Int}}
+    ZK_vec_idx::Vector{Vector{Int}}
+    K_v::Vector{R}
+    ZK_v::Vector{R}
+    Z_mat_idx::Vector{Vector{Int}}
+    Z_vec_idx::Vector{Vector{Int}}
+    M::Matrix{T}
+    schur::Matrix{T}
+    schur_fact::LU{T, Matrix{T}}
+
     N::Matrix{T}
     Nc::Matrix{T}
     tr::Vector{T}
@@ -60,7 +73,7 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
 
     DPhi::Vector{T}
     hess::Matrix{T}
-    hess_fact::Cholesky{T, Matrix{T}}
+    hess_fact
 
     Hx::Matrix{R}
 
@@ -73,8 +86,8 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
 
     function QuantKeyRate{T, R}(
         K_list::Vector{Matrix{R}},
-        Z_list::Vector{Matrix{T}};
-        protocol::Union{String, Nothing} = nothing,
+        Z_list::Vector{Matrix{T}},
+        protocol::Union{String, Nothing} = nothing;
         use_dual::Bool = false,
     ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
         cone = new{T, R}()
@@ -87,8 +100,47 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
         cone.vni = Hypatia.Cones.svec_length(R, cone.ni)
         cone.dim = 1 + cone.vni
 
-        cone.K_list_blk  = [facial_reduction(K_list)]
-        cone.ZK_list_blk = [facial_reduction([K[first.(Tuple.(findall(!iszero, Z)[:, 1])), :] for K in K_list]) for Z in Z_list]
+        if protocol == "naive"
+            ZK_list = [Z * K for K in K_list for Z in Z_list]
+            cone.K_list_blk  = [facial_reduction(K_list)]
+            cone.ZK_list_blk = [facial_reduction(ZK_list)]
+        elseif isnothing(protocol)
+            cone.K_list_blk  = [facial_reduction(K_list)]
+            cone.ZK_list_blk = [facial_reduction([K[first.(Tuple.(findall(!iszero, Z))), :] for K in K_list]) for Z in Z_list]
+        elseif protocol == "dprBB84" || protocol == "dprBB84_naive"
+            span_idx = sort(reduce(vcat, [first.(Tuple.(findall(!iszero, K))) for K in K_list]))
+            K_list_fr  = [K[span_idx, :] for K in K_list]
+            ZK_list_fr = [(Z * K)[span_idx, :] for K in K_list for Z in Z_list]
+
+            cone.K_mat_idx  = [sort(last.(Tuple.(findall(!iszero, K)))) for K in K_list_fr]
+            cone.ZK_mat_idx = [sort(last.(Tuple.(findall(!iszero, ZK)))) for ZK in ZK_list_fr]
+            cone.K_vec_idx  = [mat_to_vec_idx(R, mat_idx) for mat_idx in cone.K_mat_idx]
+            cone.ZK_vec_idx = [mat_to_vec_idx(R, mat_idx) for mat_idx in cone.ZK_mat_idx]
+            cone.K_v        = [K[findall(!iszero, K)][1] for K in K_list_fr]
+            cone.ZK_v       = [ZK[findall(!iszero, ZK)][1] for ZK in ZK_list_fr]
+
+            cone.Z_mat_idx  = [[findall(cone.K_mat_idx[1] .== x)[1] for x in ZK_mat_idx] for ZK_mat_idx in cone.ZK_mat_idx[1:2]]
+            cone.Z_vec_idx  = [mat_to_vec_idx(R, mat_idx) for mat_idx in cone.Z_mat_idx]
+
+            cone.K_list_blk = Vector{Vector{Matrix{R}}}[]
+            for (idx, v) in zip(cone.K_mat_idx, cone.K_v)
+                temp = zeros(R, length(idx), cone.ni)
+                for k in axes(idx, 1)
+                    temp[k, idx[k]] = v
+                end
+                push!(cone.K_list_blk, [temp])
+            end
+
+            cone.ZK_list_blk = Vector{Vector{Matrix{R}}}[]
+            for (idx, v) in zip(cone.ZK_mat_idx, cone.ZK_v)
+                temp = zeros(R, length(idx), cone.ni)
+                for k in axes(idx, 1)
+                    temp[k, idx[k]] = v
+                end
+                push!(cone.ZK_list_blk, [temp])
+            end
+
+        end
 
         return cone
     end
@@ -123,6 +175,13 @@ function Hypatia.Cones.setup_extra_data!(
     cone.hess = zeros(T, cone.vni, cone.vni)
 
     cone.Hx = zeros(T, ni, ni)
+
+    # Things for dprBB84
+    if cone.protocol == "dprBB84"
+        nK = length(cone.K_vec_idx[1])
+        cone.M = zeros(T, 2*nK, 2*nK)
+        cone.schur = zeros(T, 2*nK, 2*nK)
+    end
 
     return cone
 end
@@ -281,21 +340,78 @@ function update_invhessprod_aux(cone::QuantKeyRate)
     @assert cone.grad_updated
     @assert cone.hessprod_aux_updated
 
-    rt2 = cone.rt2
+    zi = 1 / cone.z
+
+    if cone.protocol == "dprBB84"
+
+        update_invhessprod_dprBB84_aux(cone)
+
+    else
+
+        Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
+        Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
+
+        # Default computation of QKD Hessian
+        cone.hess  .= kronecker_matrix(cone.Xi)
+        for (U, D1, K_list) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk)
+            cone.hess .+= frechet_matrix_alt(U, D1, K_list) * zi
+        end
+        for (U, D1, K_list) in zip(Uzgx_blk, cone.Δ2zgx_log_blk, cone.ZK_list_blk)
+            cone.hess .-= frechet_matrix_alt(U, D1, K_list) * zi
+        end    
+
+        # Rescale and factor Hessian
+        sym_hess = Symmetric(cone.hess, :U)
+        cone.hess_fact = Hypatia.Cones.posdef_fact_copy!(zero(sym_hess), sym_hess)
+
+    end
+
+    cone.invhessprod_aux_updated = true
+    return
+end
+
+function update_invhessprod_dprBB84_aux(cone::QuantKeyRate)
+    @assert !cone.invhessprod_aux_updated
+    @assert cone.grad_updated
+    @assert cone.hessprod_aux_updated
+
     zi = 1 / cone.z
 
     Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
     Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
 
     # Default computation of QKD Hessian
-    cone.hess  = kronecker_matrix(cone.Xi)
-    cone.hess += sum([frechet_matrix(U, D1, K_list) * zi
-                    for (U, D1, K_list) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk)])
-    cone.hess -= sum([frechet_matrix(U, D1, K_list) * zi
-                    for (U, D1, K_list) in zip(Uzgx_blk, cone.Δ2zgx_log_blk, cone.ZK_list_blk)])
+
+    # Get subblocks of X kron X
+    nK = length(cone.K_vec_idx[1])
+
+    X00 = cone.X[cone.K_mat_idx[1], cone.K_mat_idx[1]]
+    X01 = cone.X[cone.K_mat_idx[2], cone.K_mat_idx[1]]
+    X11 = cone.X[cone.K_mat_idx[2], cone.K_mat_idx[2]]
+    
+    small_XX = zeros(nK * 2, nK * 2)
+    small_XX[   1:nK ,    1:nK]  = kronecker_matrix(X00)
+    small_XX[nK+1:end, nK+1:end] = kronecker_matrix(X11)
+    small_XX[nK+1:end,    1:nK]  = kronecker_matrix(X01)
+    small_XX[   1:nK , nK+1:end] = small_XX[nK+1:end, 1:nK]'
+
+
+    # Default computation of QKD Hessian
+    @views M1 = cone.M[1:nK, 1:nK]
+    @views M2 = cone.M[nK+1:end, nK+1:end]
+
+    M1 .= frechet_matrix_alt(Ugx_blk[1], cone.Δ2gx_log_blk[1]) * (zi * cone.K_v[1]^4)
+    M2 .= frechet_matrix_alt(Ugx_blk[2], cone.Δ2gx_log_blk[2]) * (zi * cone.K_v[2]^4)
+
+    M1[cone.Z_vec_idx[1], cone.Z_vec_idx[1]] .-= frechet_matrix_alt(Uzgx_blk[1], cone.Δ2zgx_log_blk[1]) * (zi * cone.ZK_v[1]^4)
+    M1[cone.Z_vec_idx[2], cone.Z_vec_idx[2]] .-= frechet_matrix_alt(Uzgx_blk[2], cone.Δ2zgx_log_blk[2]) * (zi * cone.ZK_v[2]^4)
+    M2[cone.Z_vec_idx[1], cone.Z_vec_idx[1]] .-= frechet_matrix_alt(Uzgx_blk[3], cone.Δ2zgx_log_blk[3]) * (zi * cone.ZK_v[3]^4)
+    M2[cone.Z_vec_idx[2], cone.Z_vec_idx[2]] .-= frechet_matrix_alt(Uzgx_blk[4], cone.Δ2zgx_log_blk[4]) * (zi * cone.ZK_v[4]^4)
 
     # Rescale and factor Hessian
-    cone.hess_fact = cholesky(Hermitian(cone.hess))
+    mul!(cone.schur, cone.M, small_XX)
+    cone.schur[diagind(cone.schur)] .+= 1.0
+    cone.schur_fact = lu(cone.schur)
 
     cone.invhessprod_aux_updated = true
     return
@@ -310,15 +426,71 @@ function Hypatia.Cones.inv_hess_prod!(
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.invhessprod_aux_updated || update_invhessprod_aux(cone)
 
-    @inbounds for j in axes(arr, 2)
+    if cone.protocol == "dprBB84"
+
+        return inv_hess_prod_dprBB84!(prod, arr, cone)
+
+    else
+
+        @inbounds for j in axes(arr, 2)
+
+            # Get input direction
+            Ht = arr[1, j]
+            @views Hx = arr[cone.X_idxs, j]
+    
+            # Solve linear system
+            @views prod[cone.X_idxs, j] = cone.hess_fact \ (Hx + Ht*cone.DPhi)
+            prod[1, j] = cone.z * cone.z * Ht + dot(prod[cone.X_idxs, j], cone.DPhi)
+    
+        end
+
+        return prod
+
+    end
+    
+end
+
+function inv_hess_prod_dprBB84!(
+    prod::AbstractVecOrMat{T},
+    arr::AbstractVecOrMat{T},
+    cone::QuantKeyRate{T, R},
+) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
+
+    rt2 = cone.rt2
+    nK = length(cone.K_vec_idx[1])
+    p = size(arr, 2)
+
+    Ht = arr[1, :]
+    Hx = arr[cone.X_idxs, :]
+    Wx = Hx + cone.DPhi * Ht'
+
+    temp_vec = zeros(T, 2*nK, p)
+
+    @inbounds for k in axes(arr, 2)
 
         # Get input direction
-        Ht = arr[1, j]
-        @views Hx = arr[cone.X_idxs, j]
+        Wx_k = Hypatia.Cones.svec_to_smat!(zeros(R, cone.ni, cone.ni), Wx[:, k], rt2)
+        LinearAlgebra.copytri!(Wx_k, 'U', true)
+        
+        temp = cone.X * Wx_k * cone.X
+        temp2 = Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), temp, rt2)
+        temp_vec[:, k] .= temp2[reduce(vcat, cone.K_vec_idx)]
 
+    end
+
+    temp_vec = cone.M * temp_vec
+    temp_vec = cone.schur_fact \ temp_vec
+    Wx[reduce(vcat, cone.K_vec_idx), :] .-= temp_vec
+
+    @inbounds for k in axes(arr, 2)
+
+        # Get input direction
+        Wx_k = Hypatia.Cones.svec_to_smat!(zeros(R, cone.ni, cone.ni), Wx[:, k], rt2)
+        LinearAlgebra.copytri!(Wx_k, 'U', true)
+                
         # Solve linear system
-        @views prod[cone.X_idxs, j] = cone.hess_fact \ (Hx + Ht*cone.DPhi)
-        prod[1, j] = cone.z * cone.z * Ht + dot(prod[cone.X_idxs, j], cone.DPhi)
+        @views Hypatia.Cones.smat_to_svec!(prod[cone.X_idxs, k], cone.X * Wx_k * cone.X, rt2)
+        prod[1, k] = cone.z * cone.z * Ht[k] + dot(prod[cone.X_idxs, k], cone.DPhi)
 
     end
         
@@ -395,7 +567,7 @@ function Hypatia.Cones.dder3(cone::QuantKeyRate{T, R}, dir::AbstractVector{T}) w
     temp    .-= 2 * cone.Xi * Hx * cone.Xi * Hx * cone.Xi
     dder3_X .+= Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), temp, cone.rt2)
 
-    # @. dder3 *= -0.5    
+    @. dder3 *= -0.5    
 
     return dder3
 end
@@ -469,31 +641,6 @@ function Δ2_frechet(
     return U * out * U'
 end
 
-
-function facial_reduction(K_list::Vector{Matrix{R}}) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
-    # For a set of Kraus operators i.e., SUM_i K_i @ X @ K_i.T, returns a set of
-    # Kraus operators which preserves positive definiteness
-    nk = size(K_list[1], 1)
-
-    # Pass identity matrix (maximally mixed state) through the Kraus operators
-    KK = sum([K * K' for K in K_list])
-
-    # Determine if output is low rank, in which case we need to perform facial reduction
-    Dkk, Ukk = eigen(Hermitian(KK, :U))
-    KKnzidx = Dkk .> 1e-12
-    nk_fr = sum(KKnzidx)
-
-    if nk == nk_fr
-        return K_list
-    end
-    
-    # Perform facial reduction
-    Qkk = Ukk[:, KKnzidx]
-    K_list_fr = [Qkk' * K for K in K_list]
-
-    return K_list_fr
-end
-
 function congr(x, K_list, adjoint = false)
     if adjoint
         return sum([K' * x * K for K in K_list])
@@ -512,8 +659,8 @@ function frechet_matrix(U::Matrix{R}, D1::Matrix{T}, K_list=nothing) where {T <:
     out = zeros(T, vn, vn)
 
     k = 1
-    for j in 1:n
-        for i in 1:j-1
+    @inbounds for j in 1:n
+        @inbounds for i in 1:j-1
             UHU = sum([KU'[:, i] * transpose(KU[j, :]) for KU in KU_list]) / rt2
             D_H = congr(D1 .* UHU, KU_list)
             @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
@@ -535,6 +682,42 @@ function frechet_matrix(U::Matrix{R}, D1::Matrix{T}, K_list=nothing) where {T <:
     return out
 end
 
+
+function frechet_matrix_alt(U::Matrix{R}, D1::Matrix{T}, K_list=nothing) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
+    # Build matrix corresponding to linear map H -> U @ [D1 * (U' @ H @ U)] @ U'
+    KU_list = isnothing(K_list) ? [U] : [K' * U for K in K_list]
+    D1_rt2 = sqrt.(D1)
+    
+    (n, m) = size(KU_list[1])
+    vn  = Hypatia.Cones.svec_length(R, n)
+    vm  = Hypatia.Cones.svec_length(R, m)
+    rt2 = sqrt(2.)
+    out = zeros(T, vm, vn)
+
+    k = 1
+    @inbounds for j in 1:n
+        @inbounds for i in 1:j-1
+            UHU = sum([KU'[:, i] * transpose(KU[j, :]) for KU in KU_list]) / rt2
+            D_H = D1_rt2 .* UHU
+            @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
+            k += 1
+
+            if R == Complex{T}
+                D_H *= -1im
+                @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H + D_H', rt2)
+                k += 1
+            end
+        end
+
+        UHU = sum([KU'[:, j] * transpose(KU[j, :]) for KU in KU_list])
+        D_H = D1_rt2 .* UHU
+        @views Hypatia.Cones.smat_to_svec!(out[:, k], D_H, rt2)
+        k += 1
+    end
+
+    return out' * out
+end
+
 function kronecker_matrix(X::Matrix{R}) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build matrix corresponding to linear map H -> X H X'
     n   = size(X, 1)
@@ -543,8 +726,8 @@ function kronecker_matrix(X::Matrix{R}) where {T <: Real, R <: Hypatia.RealOrCom
     out = zeros(T, vn, vn)
 
     k = 1
-    for j in 1:n
-        for i in 1:j-1
+    @inbounds for j in 1:n
+        @inbounds for i in 1:j-1
             temp = X[:, i] * transpose(X'[j, :]) / rt2
             @views Hypatia.Cones.smat_to_svec!(out[:, k], temp + temp', rt2)
             k += 1
@@ -562,4 +745,31 @@ function kronecker_matrix(X::Matrix{R}) where {T <: Real, R <: Hypatia.RealOrCom
     end
 
     return out
+end
+
+function mat_to_vec_idx(R::Type, mat_idx)
+    # Get indices
+    n  = length(mat_idx)
+    vn = Hypatia.Cones.svec_length(R, n)
+    vec_idx = zeros(UInt64, vn)
+
+    k = 1
+    for j in 1:n
+        for i in 1:j-1
+            (I, J) = (mat_idx[i] - 1, mat_idx[j] - 1)
+            vec_idx[k] = 2*I + J*J + 1
+            k += 1
+
+            if R == Complex{T}
+                vec_idx[k] = 2*I + J*J + 2
+                k += 1
+            end
+        end
+        
+        J = mat_idx[j] - 1
+        vec_idx[k] = 2*J + J*J + 1
+        k += 1
+    end
+
+    return vec_idx
 end
