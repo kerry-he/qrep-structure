@@ -110,40 +110,40 @@ function main()
 
     # Use specialized dprBB4 oracle
     model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     println("Now using specialized dprBB84 cone oracle")
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
+    print_statistics(solver)
 
     # Use specialized QKD oracle with block diagonalization
     model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84_naive")
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     println("Now using specialized QKD cone oracle")
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
+    print_statistics(solver)
 
     # Use generic QKD oracle without block diagonalization
     model = qkd_problem(K_list, Z_list, Γ, γ, "naive")
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     println("Now using generic QKD cone oracle")
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)    
+    print_statistics(solver)   
 
     # Use generic QRD oracle
     K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
     Z_list = convert(Vector{Matrix{R}}, data["Zlist"][:])
-    Γ = convert(Vector{Matrix{R}}, data["Gamma_fr"][:])
-    γ = convert(Vector{T}, data["gamma_fr"][:])
+    Γ = convert(Vector{Matrix{R}}, data["Gamma"][:])
+    γ = convert(Vector{T}, data["gamma"][:])
 
     model = qkd_naive_problem(K_list, Z_list, Γ, γ)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
     println("Now using generic QRE cone oracle")
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
+    print_statistics(solver)
 end
 
 main()

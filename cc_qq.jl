@@ -11,7 +11,7 @@ include("systemsolvers/elim.jl")
 include("utils/helper.jl")
 
 import Random
-# Random.seed!(1)
+Random.seed!(1)
 
 T = Float64
 
@@ -105,7 +105,7 @@ end
 
 function main()
     # Define random instance of ea channel capacity problem
-    (ni, no, ne) = (4, 4, 4)
+    (ni, no, ne) = (8, 8, 8)
     V, W = randDegradableChannel(T, ni, no, ne)
     N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
     Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
@@ -114,30 +114,19 @@ function main()
     solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
-
+    print_statistics(solver)
 
     model = qqcc_qce_problem(ni, no, ne, N, W)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+    print_statistics(solver)
 
-
-    model = qqcc_qre_problem(ni, no, ne, N, W)
-    solver = Solvers.Solver{T}(verbose = true)
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))        
+    # model = qqcc_qre_problem(ni, no, ne, N, W)
+    # solver = Solvers.Solver{T}(verbose = true)
+    # Solvers.load(solver, model)
+    # Solvers.solve(solver)
+    # print_statistics(solver)  
 end
 
 main()

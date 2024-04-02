@@ -11,7 +11,7 @@ include("systemsolvers/elim.jl")
 include("utils/helper.jl")
 
 import Random
-# Random.seed!(1)
+Random.seed!(1)
 
 T = Float64
 
@@ -127,37 +127,28 @@ end
 
 function main()
     # Define random instance of ea channel capacity problem
-    (ni, no, ne) = (4, 4, 4)
+    (ni, no, ne) = (2, 2, 2)
     V = randStinespringOperator(T, ni, no, ne)
 
     model = eacc_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+    print_statistics(solver)
 
 
     model = eacc_qce_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+    print_statistics(solver)
 
 
     model = eacc_qre_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))    
+    print_statistics(solver)
 end
 
 main()

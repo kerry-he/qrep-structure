@@ -99,20 +99,14 @@ function main()
     solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+    print_statistics(solver)
 
 
     model = med_naive_problem(L)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    
-    println("Solve time: ", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
-    println("Num iter: ", Solvers.get_num_iters(solver))
-    println("Abs gap: ", Solvers.get_primal_obj(solver) - Solvers.get_dual_obj(solver))
+    print_statistics(solver)
 end
 
 main()

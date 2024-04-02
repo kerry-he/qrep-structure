@@ -73,6 +73,7 @@ mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia
 
     DPhi::Vector{T}
     hess::Matrix{T}
+    hess_temp::Symmetric{T, Matrix{T}}
     hess_fact
 
     temp1::Matrix{T}
@@ -179,6 +180,7 @@ function Hypatia.Cones.setup_extra_data!(
 
     cone.DPhi = zeros(T, cone.vni)
     cone.hess = zeros(T, cone.vni, cone.vni)
+    cone.hess_temp = Symmetric(zeros(T, cone.vni, cone.vni))
 
     cone.Hx = zeros(T, ni, ni)
 
@@ -389,7 +391,7 @@ function update_invhessprod_aux(cone::QuantKeyRate)
         Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
 
         # Default computation of QKD Hessian
-        kronecker_matrix!(cone.hess, cone.Xi)
+        Hypatia.Cones.symm_kron!(cone.hess, cone.Xi, cone.rt2)
         for (U, D1, K_list, temp) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk, cone.temp_K_blk)
             frechet_matrix!(cone.hess, U, D1, temp, zi, K_list)
         end
@@ -399,7 +401,7 @@ function update_invhessprod_aux(cone::QuantKeyRate)
 
         # Rescale and factor Hessian
         sym_hess = Symmetric(cone.hess, :U)
-        cone.hess_fact = Hypatia.Cones.posdef_fact_copy!(zero(sym_hess), sym_hess)
+        cone.hess_fact = Hypatia.Cones.posdef_fact_copy!(cone.hess_temp, sym_hess)
 
     end
 
@@ -480,7 +482,7 @@ function Hypatia.Cones.inv_hess_prod!(
         Hx = arr[cone.X_idxs, :]
         Wx = Hx .+ cone.DPhi * Ht'
 
-        prod[cone.X_idxs, :] .= cone.hess_fact \ Wx
+        @views ldiv!(prod[cone.X_idxs, :], cone.hess_fact, Wx)
         prod[1, :] = cone.z * cone.z * Ht + prod[cone.X_idxs, :]' * cone.DPhi
 
         return prod
@@ -606,7 +608,7 @@ function Hypatia.Cones.dder3(cone::QuantKeyRate{T, R}, dir::AbstractVector{T}) w
     temp    .-= 2 * cone.Xi * Hx * cone.Xi * Hx * cone.Xi
     dder3_X .+= Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), temp, cone.rt2)
 
-    @. dder3 *= -0.5    
+    @. dder3 *= -0.5
 
     return dder3
 end
