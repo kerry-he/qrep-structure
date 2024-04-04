@@ -255,12 +255,12 @@ end
 
 function main()
     # Define rate distortion problem with entanglement fidelity distortion
-    n = 16
+    n = 2
     λ = eigvals(randDensityMatrix(T, n))
     D = 0.5
     
     model = qrd_ef_problem(n, λ, D)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = true, preprocess = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     print_statistics(solver)

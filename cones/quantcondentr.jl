@@ -67,6 +67,7 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     KHxK::Matrix{T}
     HYY_KHxK::Matrix{T}
     HYY_KHxK_chol::Cholesky{T, Matrix{T}}
+    schur_temp::Symmetric{T, Matrix{T}}
 
     HX::Matrix{T}
     HY::Matrix{T}
@@ -165,6 +166,7 @@ function Hypatia.Cones.setup_extra_data!(
     cone.HYY = zeros(T, Y_dim, Y_dim)
     cone.KHxK = zeros(T, Y_dim, Y_dim)
     cone.HYY_KHxK = zeros(T, Y_dim, Y_dim)
+    cone.schur_temp = Symmetric(zeros(T, Y_dim, Y_dim))
 
     cone.HX = zeros(T, N, N)
     cone.HY = zeros(T, n, n)
@@ -459,7 +461,7 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
     @. HYY_KHxK = HYY - KHxK;
 
     sym_hess = Symmetric(HYY_KHxK, :U)
-    cone.HYY_KHxK_chol = Hypatia.Cones.posdef_fact_copy!(zero(sym_hess), sym_hess)    
+    cone.HYY_KHxK_chol = Hypatia.Cones.posdef_fact_copy!(cone.schur_temp, sym_hess)    
 
     cone.invhessprod_aux_updated = true
     return

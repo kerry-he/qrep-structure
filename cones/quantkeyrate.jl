@@ -231,11 +231,11 @@ function Hypatia.Cones.set_initial_point!(
     arr::AbstractVector{T},
     cone::QuantKeyRate{T, R},
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
-    GG_blk  = [congr(1.0I, K_list)  for K_list  in cone.K_list_blk]
-    ZGGZ_blk = [congr(1.0I, ZK_list) for ZK_list in cone.ZK_list_blk]
+    @inbounds GG_blk  = [congr(1.0I, K_list)  for K_list  in cone.K_list_blk]
+    @inbounds ZGGZ_blk = [congr(1.0I, ZK_list) for ZK_list in cone.ZK_list_blk]
 
-    entr_GX  = sum([entr(GG) for GG in GG_blk])
-    entr_ZGX = sum([entr(ZGGZ) for ZGGZ in ZGGZ_blk])
+    @inbounds entr_GX  = sum([entr(GG) for GG in GG_blk])
+    @inbounds entr_ZGX = sum([entr(ZGGZ) for ZGGZ in ZGGZ_blk])
 
     arr[1] = 1.0 + (entr_GX - entr_ZGX)
     X0 = Matrix{R}(I, cone.ni, cone.ni)
@@ -251,8 +251,8 @@ function Hypatia.Cones.update_feas(cone::QuantKeyRate{T, R}) where {T <: Real, R
     point = cone.point
     @views Hypatia.Cones.svec_to_smat!(cone.X, point[cone.X_idxs], cone.rt2)
     LinearAlgebra.copytri!(cone.X, 'U', true)
-    cone.GX_blk  = [congr(cone.X, K_list)  for K_list  in cone.K_list_blk]
-    cone.ZGX_blk = [congr(cone.X, ZK_list) for ZK_list in cone.ZK_list_blk]
+    @inbounds cone.GX_blk  = [congr(cone.X, K_list)  for K_list  in cone.K_list_blk]
+    @inbounds cone.ZGX_blk = [congr(cone.X, ZK_list) for ZK_list in cone.ZK_list_blk]
 
     XH = Hermitian(cone.X, :U)
 
@@ -262,18 +262,18 @@ function Hypatia.Cones.update_feas(cone::QuantKeyRate{T, R}) where {T <: Real, R
         ZGX_fact_blk = cone.ZGX_fact_blk = [eigen(Hermitian(X, :U)) for X in cone.ZGX_blk]
 
         if isposdef(X_fact) && all(isposdef.(GX_fact_blk)) && all(isposdef.(ZGX_fact_blk))
-            Λgx_blk  = [fact.values for fact in GX_fact_blk]
-            Ugx_blk  = [fact.vectors for fact in GX_fact_blk]
-            cone.Λgx_log_blk = [log.(λgx) for λgx in Λgx_blk]
-            cone.GX_log_blk  = [U * diagm(Λ) * U' for (U, Λ) in zip(Ugx_blk, cone.Λgx_log_blk)]
+            @inbounds Λgx_blk  = [fact.values for fact in GX_fact_blk]
+            @inbounds Ugx_blk  = [fact.vectors for fact in GX_fact_blk]
+            @inbounds cone.Λgx_log_blk = [log.(λgx) for λgx in Λgx_blk]
+            @inbounds cone.GX_log_blk  = [U * diagm(Λ) * U' for (U, Λ) in zip(Ugx_blk, cone.Λgx_log_blk)]
 
-            Λzgx_blk = [fact.values for fact in ZGX_fact_blk]
-            Uzgx_blk = [fact.vectors for fact in ZGX_fact_blk] 
-            cone.Λzgx_log_blk = [log.(λgx) for λgx in Λzgx_blk]
-            cone.ZGX_log_blk  = [U * diagm(Λ) * U' for (U, Λ) in zip(Uzgx_blk, cone.Λzgx_log_blk)]            
+            @inbounds Λzgx_blk = [fact.values for fact in ZGX_fact_blk]
+            @inbounds Uzgx_blk = [fact.vectors for fact in ZGX_fact_blk] 
+            @inbounds cone.Λzgx_log_blk = [log.(λgx) for λgx in Λzgx_blk]
+            @inbounds cone.ZGX_log_blk  = [U * diagm(Λ) * U' for (U, Λ) in zip(Uzgx_blk, cone.Λzgx_log_blk)]            
 
-            entr_GX  = sum([dot(λ, λ_log) for (λ, λ_log) in zip(Λgx_blk, cone.Λgx_log_blk)])
-            entr_ZGX = sum([dot(λ, λ_log) for (λ, λ_log) in zip(Λzgx_blk, cone.Λzgx_log_blk)])
+            @inbounds entr_GX  = sum([dot(λ, λ_log) for (λ, λ_log) in zip(Λgx_blk, cone.Λgx_log_blk)])
+            @inbounds entr_ZGX = sum([dot(λ, λ_log) for (λ, λ_log) in zip(Λzgx_blk, cone.Λzgx_log_blk)])
 
             cone.z = point[1] - (entr_GX - entr_ZGX)
 
@@ -296,8 +296,8 @@ function Hypatia.Cones.update_grad(cone::QuantKeyRate)
 
     cone.Xi .= Ux * diagm(inv.(Λx)) * Ux'
 
-    G_log_GX   = sum([congr(X_log, Klist, true) for (X_log, Klist) in zip(cone.GX_log_blk, cone.K_list_blk)])
-    ZG_log_ZGX = sum([congr(X_log, Klist, true) for (X_log, Klist) in zip(cone.ZGX_log_blk, cone.ZK_list_blk)])
+    @inbounds G_log_GX   = sum([congr(X_log, Klist, true) for (X_log, Klist) in zip(cone.GX_log_blk, cone.K_list_blk)])
+    @inbounds ZG_log_ZGX = sum([congr(X_log, Klist, true) for (X_log, Klist) in zip(cone.ZGX_log_blk, cone.ZK_list_blk)])
 
     zi = inv(cone.z)
     Hypatia.Cones.smat_to_svec!(cone.DPhi, G_log_GX - ZG_log_ZGX, rt2)
@@ -315,12 +315,12 @@ function update_hessprod_aux(cone::QuantKeyRate)
     @assert !cone.hessprod_aux_updated
     @assert cone.grad_updated
 
-    Λgx_blk  = [fact.values for fact in cone.GX_fact_blk]
-    Λzgx_blk = [fact.values for fact in cone.ZGX_fact_blk]
+    @inbounds Λgx_blk  = [fact.values for fact in cone.GX_fact_blk]
+    @inbounds Λzgx_blk = [fact.values for fact in cone.ZGX_fact_blk]
 
     # Compute first divideded differences matrix
-    cone.Δ2gx_log_blk  = [Δ2_log!(zeros(T, length(D), length(D)), D, D_log) for (D, D_log) in zip(Λgx_blk,  cone.Λgx_log_blk)]
-    cone.Δ2zgx_log_blk = [Δ2_log!(zeros(T, length(D), length(D)), D, D_log) for (D, D_log) in zip(Λzgx_blk,  cone.Λzgx_log_blk)]
+    @inbounds cone.Δ2gx_log_blk  = [Δ2_log!(zeros(T, length(D), length(D)), D, D_log) for (D, D_log) in zip(Λgx_blk,  cone.Λgx_log_blk)]
+    @inbounds cone.Δ2zgx_log_blk = [Δ2_log!(zeros(T, length(D), length(D)), D, D_log) for (D, D_log) in zip(Λzgx_blk,  cone.Λzgx_log_blk)]
  
     cone.hessprod_aux_updated = true
     return
@@ -338,8 +338,8 @@ function Hypatia.Cones.hess_prod!(
     rt2 = cone.rt2
     zi = 1 / cone.z
 
-    Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
-    Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
+    @inbounds Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
+    @inbounds Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
 
     Hx = cone.Hx
 
@@ -351,16 +351,16 @@ function Hypatia.Cones.hess_prod!(
         @views Hypatia.Cones.svec_to_smat!(Hx, Hx_vec, rt2)
         LinearAlgebra.copytri!(Hx, 'U', true)
 
-        KH_blk  = [congr(Hx, K_list)  for K_list  in cone.K_list_blk]
-        ZKH_blk = [congr(Hx, ZK_list) for ZK_list in cone.ZK_list_blk]
+        @inbounds KH_blk  = [congr(Hx, K_list)  for K_list  in cone.K_list_blk]
+        @inbounds ZKH_blk = [congr(Hx, ZK_list) for ZK_list in cone.ZK_list_blk]
 
-        UkKHUk_blk    = [U' * H * U for (H, U) in zip(KH_blk, Ugx_blk)]
-        UkzZKHUkz_blk = [U' * H * U for (H, U) in zip(ZKH_blk, Uzgx_blk)]
+        @inbounds UkKHUk_blk    = [U' * H * U for (H, U) in zip(KH_blk, Ugx_blk)]
+        @inbounds UkzZKHUkz_blk = [U' * H * U for (H, U) in zip(ZKH_blk, Uzgx_blk)]
 
         # Hessian product of quantum entropies
-        D2PhiH  = sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
+        @inbounds D2PhiH  = sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
                  in zip(Ugx_blk, cone.Δ2gx_log_blk, UkKHUk_blk, cone.K_list_blk)])
-        D2PhiH -= sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
+                 @inbounds D2PhiH -= sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
                  in zip(Uzgx_blk, cone.Δ2zgx_log_blk, UkzZKHUkz_blk, cone.ZK_list_blk)])
 
         prodt = zi * zi * (Ht - dot(Hx_vec, cone.DPhi))
@@ -387,17 +387,17 @@ function update_invhessprod_aux(cone::QuantKeyRate)
 
     else
 
-        Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
-        Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
+        @inbounds Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
+        @inbounds Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
 
         # Default computation of QKD Hessian
         Hypatia.Cones.symm_kron!(cone.hess, cone.Xi, cone.rt2)
-        for (U, D1, K_list, temp) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk, cone.temp_K_blk)
+        @inbounds for (U, D1, K_list, temp) in zip(Ugx_blk, cone.Δ2gx_log_blk, cone.K_list_blk, cone.temp_K_blk)
             frechet_matrix!(cone.hess, U, D1, temp, zi, K_list)
         end
-        for (U, D1, K_list, temp) in zip(Uzgx_blk, cone.Δ2zgx_log_blk, cone.ZK_list_blk, cone.temp_ZK_blk)
+        @inbounds for (U, D1, K_list, temp) in zip(Uzgx_blk, cone.Δ2zgx_log_blk, cone.ZK_list_blk, cone.temp_ZK_blk)
             frechet_matrix!(cone.hess, U, D1, temp, -zi, K_list)
-        end    
+        end
 
         # Rescale and factor Hessian
         sym_hess = Symmetric(cone.hess, :U)
@@ -409,12 +409,15 @@ function update_invhessprod_aux(cone::QuantKeyRate)
     return
 end
 
-function update_invhessprod_dprBB84_aux(cone::QuantKeyRate)
+function update_invhessprod_dprBB84_aux(
+    cone::QuantKeyRate{T, R},
+) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     @assert !cone.invhessprod_aux_updated
     @assert cone.grad_updated
     @assert cone.hessprod_aux_updated
 
     zi = 1 / cone.z
+    rt2 = cone.rt2
 
     Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
     Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
@@ -422,22 +425,21 @@ function update_invhessprod_dprBB84_aux(cone::QuantKeyRate)
     # Default computation of QKD Hessian
 
     # Get subblocks of X kron X
-    nK = length(cone.K_vec_idx[1])
+    vnk = length(cone.K_vec_idx[1])
 
     X00 = cone.X[cone.K_mat_idx[1], cone.K_mat_idx[1]]
-    X01 = cone.X[cone.K_mat_idx[2], cone.K_mat_idx[1]]
+    X10 = cone.X[cone.K_mat_idx[1], cone.K_mat_idx[2]]
     X11 = cone.X[cone.K_mat_idx[2], cone.K_mat_idx[2]]
     
-    small_XX = zeros(nK * 2, nK * 2)
-    @views kronecker_matrix!(small_XX[   1:nK ,    1:nK],  X00)
-    @views kronecker_matrix!(small_XX[nK+1:end, nK+1:end], X11)
-    @views kronecker_matrix!(small_XX[nK+1:end,    1:nK],  X01)
-    small_XX[1:nK, nK+1:end] = small_XX[nK+1:end, 1:nK]'
-
+    small_XX = zeros(T, vnk * 2, vnk * 2)
+    @views Hypatia.Cones.symm_kron!(small_XX[   1:vnk ,    1:vnk],  X00, rt2)
+    @views Hypatia.Cones.symm_kron!(small_XX[vnk+1:end, vnk+1:end], X11, rt2)
+    @views nonsymm_kron!(small_XX[1:vnk, vnk+1:end],  X10, rt2)
+    LinearAlgebra.copytri!(small_XX, 'U')
 
     # Default computation of QKD Hessian
-    @views M1 = cone.M[1:nK, 1:nK]
-    @views M2 = cone.M[nK+1:end, nK+1:end]
+    @views M1 = cone.M[1:vnk, 1:vnk]
+    @views M2 = cone.M[vnk+1:end, vnk+1:end]
 
     @views M11 = M1[cone.Z_vec_idx[1], cone.Z_vec_idx[1]]
     @views M12 = M1[cone.Z_vec_idx[2], cone.Z_vec_idx[2]]
@@ -453,6 +455,8 @@ function update_invhessprod_dprBB84_aux(cone::QuantKeyRate)
     frechet_matrix!(M12, Uzgx_blk[2], cone.Δ2zgx_log_blk[2], cone.temp_ZK_blk[2], -zi * cone.ZK_v[2]^4)
     frechet_matrix!(M21, Uzgx_blk[3], cone.Δ2zgx_log_blk[3], cone.temp_ZK_blk[3], -zi * cone.ZK_v[3]^4)
     frechet_matrix!(M22, Uzgx_blk[4], cone.Δ2zgx_log_blk[4], cone.temp_ZK_blk[4], -zi * cone.ZK_v[4]^4)
+
+    LinearAlgebra.copytri!(cone.M, 'U', true)
 
     # Rescale and factor Hessian
     mul!(cone.schur, cone.M, small_XX)
@@ -500,6 +504,7 @@ function inv_hess_prod_dprBB84!(
     rt2 = cone.rt2
     nK = length(cone.K_vec_idx[1])
     p = size(arr, 2)
+    Wx_k = zeros(R, cone.ni, cone.ni)
 
     Ht = arr[1, :]
     Hx = arr[cone.X_idxs, :]
@@ -510,7 +515,7 @@ function inv_hess_prod_dprBB84!(
     @inbounds for k in axes(arr, 2)
 
         # Get input direction
-        Wx_k = Hypatia.Cones.svec_to_smat!(zeros(R, cone.ni, cone.ni), Wx[:, k], rt2)
+        Hypatia.Cones.svec_to_smat!(Wx_k, Wx[:, k], rt2)
         LinearAlgebra.copytri!(Wx_k, 'U', true)
         
         temp = cone.X * Wx_k * cone.X
@@ -526,7 +531,7 @@ function inv_hess_prod_dprBB84!(
     @inbounds for k in axes(arr, 2)
 
         # Get input direction
-        Wx_k = Hypatia.Cones.svec_to_smat!(zeros(R, cone.ni, cone.ni), Wx[:, k], rt2)
+        Hypatia.Cones.svec_to_smat!(Wx_k, Wx[:, k], rt2)
         LinearAlgebra.copytri!(Wx_k, 'U', true)
                 
         # Solve linear system
@@ -542,12 +547,12 @@ function update_dder3_aux(cone::QuantKeyRate)
     @assert !cone.dder3_aux_updated
     @assert cone.hessprod_aux_updated
 
-    Λgx_blk  = [fact.values for fact in cone.GX_fact_blk]
-    Λzgx_blk = [fact.values for fact in cone.ZGX_fact_blk]
+    @inbounds Λgx_blk  = [fact.values for fact in cone.GX_fact_blk]
+    @inbounds Λzgx_blk = [fact.values for fact in cone.ZGX_fact_blk]
 
     # Compute first divideded differences matrix
-    cone.Δ3gx_log_blk  = [Δ3_log!(zeros(T, length(D), length(D), length(D)), D1, D) for (D, D1) in zip(Λgx_blk,  cone.Δ2gx_log_blk)]
-    cone.Δ3zgx_log_blk = [Δ3_log!(zeros(T, length(D), length(D), length(D)), D1, D) for (D, D1) in zip(Λzgx_blk, cone.Δ2zgx_log_blk)]
+    @inbounds cone.Δ3gx_log_blk  = [Δ3_log!(zeros(T, length(D), length(D), length(D)), D1, D) for (D, D1) in zip(Λgx_blk,  cone.Δ2gx_log_blk)]
+    @inbounds cone.Δ3zgx_log_blk = [Δ3_log!(zeros(T, length(D), length(D), length(D)), D1, D) for (D, D1) in zip(Λzgx_blk, cone.Δ2zgx_log_blk)]
 
     cone.dder3_aux_updated = true
     return
@@ -561,8 +566,8 @@ function Hypatia.Cones.dder3(cone::QuantKeyRate{T, R}, dir::AbstractVector{T}) w
     rt2 = cone.rt2
     zi = 1 / cone.z
 
-    Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
-    Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
+    @inbounds Ugx_blk  = [fact.vectors for fact in cone.GX_fact_blk]
+    @inbounds Uzgx_blk = [fact.vectors for fact in cone.ZGX_fact_blk] 
 
     Hx = cone.Hx
 
@@ -574,23 +579,23 @@ function Hypatia.Cones.dder3(cone::QuantKeyRate{T, R}, dir::AbstractVector{T}) w
     @views Hypatia.Cones.svec_to_smat!(Hx, Hx_vec, rt2)
     LinearAlgebra.copytri!(Hx, 'U', true)
 
-    KH_blk  = [congr(Hx, K_list)  for K_list  in cone.K_list_blk]
-    ZKH_blk = [congr(Hx, ZK_list) for ZK_list in cone.ZK_list_blk]
+    @inbounds KH_blk  = [congr(Hx, K_list)  for K_list  in cone.K_list_blk]
+    @inbounds ZKH_blk = [congr(Hx, ZK_list) for ZK_list in cone.ZK_list_blk]
 
-    UkKHUk_blk    = [U' * H * U for (H, U) in zip(KH_blk, Ugx_blk)]
-    UkzZKHUkz_blk = [U' * H * U for (H, U) in zip(ZKH_blk, Uzgx_blk)]
+    @inbounds UkKHUk_blk    = [U' * H * U for (H, U) in zip(KH_blk, Ugx_blk)]
+    @inbounds UkzZKHUkz_blk = [U' * H * U for (H, U) in zip(ZKH_blk, Uzgx_blk)]
 
 
     # Derivatives of objective function
-    D2PhiH  = sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
+    @inbounds D2PhiH  = sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
             in zip(Ugx_blk, cone.Δ2gx_log_blk, UkKHUk_blk, cone.K_list_blk)])
-    D2PhiH -= sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
+    @inbounds D2PhiH -= sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
             in zip(Uzgx_blk, cone.Δ2zgx_log_blk, UkzZKHUkz_blk, cone.ZK_list_blk)])
 
 
-    D3PhiHH  = sum([congr(Δ2_frechet(UHU .* D2, U, UHU), K_list, true) for (U, D2, UHU, K_list)
+    @inbounds D3PhiHH  = sum([congr(Δ2_frechet(UHU .* D2, U, UHU), K_list, true) for (U, D2, UHU, K_list)
             in zip(Ugx_blk, cone.Δ3gx_log_blk, UkKHUk_blk, cone.K_list_blk)])
-    D3PhiHH -= sum([congr(Δ2_frechet(UHU .* D2, U, UHU), K_list, true) for (U, D2, UHU, K_list)
+    @inbounds D3PhiHH -= sum([congr(Δ2_frechet(UHU .* D2, U, UHU), K_list, true) for (U, D2, UHU, K_list)
             in zip(Uzgx_blk, cone.Δ3zgx_log_blk, UkzZKHUkz_blk, cone.ZK_list_blk)])
 
 
@@ -627,15 +632,18 @@ function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: 
             λ_ij = λ_i - λ_j
             if abs(λ_ij) < rteps
                 Δ2[i, j] = 2 / (λ_i + λ_j)
-            else
+            elseif (λ_i < λ_j / 2) || (λ_j < λ_i / 2)
                 Δ2[i, j] = (log_λ[i] - lλ_j) / λ_ij
+            else
+                z = λ_ij / (λ_i + λ_j)
+                Δ2[i, j] = 2 * atanh(z) / λ_ij
             end
         end
         Δ2[j, j] = inv(λ_j)
     end
 
     # make symmetric
-    LinearAlgebra.LinearAlgebra.LinearAlgebra.copytri!(Δ2, 'U', true)
+    LinearAlgebra.copytri!(Δ2, 'U', true)
     return Δ2
 end
 
@@ -706,6 +714,7 @@ function frechet_matrix!(
     rt2 = sqrt(2.)
 
     UHU = zeros(R, m, m)
+    temp2 = zeros(R, m, m)
 
     k = 1
     @inbounds for j in 1:n
@@ -714,14 +723,17 @@ function frechet_matrix!(
             for KU in KU_list
                 mul!(UHU, KU'[:, i], transpose(KU[j, :]), true, true)
             end
-            UHU ./= rt2
-            UHU .*= D1_rt2
-            @views Hypatia.Cones.smat_to_svec!(temp[k, :], UHU .+ UHU', rt2)
+            UHU .*= D1_rt2 ./ rt2
+            temp2 .= UHU
+            temp2 .+= UHU'
+            @views Hypatia.Cones.smat_to_svec!(temp[k, :], temp2, rt2)
             k += 1
 
             if R == Complex{T}
                 @. UHU *= -1im
-                @views Hypatia.Cones.smat_to_svec!(temp[k, :], UHU .+ UHU', rt2)
+                temp2 .= UHU
+                temp2 .+= UHU'                
+                @views Hypatia.Cones.smat_to_svec!(temp[k, :], temp2, rt2)
                 k += 1
             end
         end
@@ -735,16 +747,29 @@ function frechet_matrix!(
         k += 1
     end
 
-    return mul!(out, temp, temp', c, true)
+    return syrk_wrapper!(out, temp, c)
 end
 
-function kronecker_matrix!(
+function syrk_wrapper!(C::Matrix{T}, A::Matrix{T}, alpha::T) where {T <: Real}
+    return LinearAlgebra.BLAS.syrk!('U', 'N', alpha, A, true, C)
+end
+
+function syrk_wrapper!(C::AbstractMatrix{T}, A::Matrix{T}, alpha::T) where {T <: Real}
+    # BLAS doesn't support views of matrices, so need to work around this
+    temp = LinearAlgebra.BLAS.syrk('U', 'N', alpha, A)
+    @inbounds for j in axes(C, 1), i in 1:j
+        C[i, j] += temp[i, j]
+    end
+    return C
+end
+
+function nonsymm_kron!(
     out::AbstractMatrix{T},
     X::Matrix{R},
+    rt2::T
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build matrix corresponding to linear map H -> X H X'
     n   = size(X, 1)
-    rt2 = sqrt(2.)
 
     temp = zeros(R, n, n)
 

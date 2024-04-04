@@ -12,7 +12,7 @@ include("systemsolvers/elim.jl")
 include("utils/helper.jl")
 
 import Random
-# Random.seed!(1)
+Random.seed!(1)
 
 T = Float64
 
@@ -94,7 +94,7 @@ end
 function main()
     # Define rate distortion problem with entanglement fidelity distortion
     # f = MAT.matopen("data/DMCV_10_60_05_35.mat")
-    f = MAT.matopen("data/dprBB84_4_02_15.mat")
+    f = MAT.matopen("data/dprBB84_8_14_30.mat")
     data = MAT.read(f, "Data")
 
     if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma_fr"][:]) == 0)
@@ -105,8 +105,8 @@ function main()
     
     K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
     Z_list = convert(Vector{Matrix{T}}, data["Zlist"][:])
-    Γ = convert(Vector{Matrix{R}}, data["Gamma_fr"][:])
-    γ = convert(Vector{T}, data["gamma_fr"][:])
+    Γ = convert(Vector{Matrix{R}}, data["Gamma"][:])
+    γ = convert(Vector{T}, data["gamma"][:])
 
     # Use specialized dprBB4 oracle
     model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
