@@ -48,13 +48,15 @@ function Hypatia.Solvers.update_lhs(
     model = solver.model
     n = model.n    
 
+    G_inv = inv.(diag(model.G))
     A = model.A
+    Ginv_A = G_inv .* A'
     HA = syssolver.HA
     AHA = syssolver.AHA
 
     # Compute Schur complement matrix
-    blk_inv_hess_prod!(HA, A', model.cones, model.cone_idxs)
-    mul!(AHA, A, HA)
+    blk_inv_hess_prod!(HA, Ginv_A, model.cones, model.cone_idxs)
+    mul!(AHA, Ginv_A', HA)
     syssolver.AHA_chol = factorize(AHA)
 
     # Compute constant 3x3 subsystem
@@ -109,20 +111,22 @@ function solve_subsystem(
 
     n = model.n
     A = model.A
+    G_inv = inv.(diag(model.G))
+    Ginv_A = G_inv .* A'    
 
     # Compute y solution
     Hrxrs = zeros(T, n)
-    blk_inv_hess_prod!(Hrxrs, rx + rs, cones, cone_idxs)
-    rhs_y = A * (Hrxrs + rz) + ry
+    blk_inv_hess_prod!(Hrxrs, G_inv .* rx - rs, cones, cone_idxs)
+    rhs_y = Ginv_A' * (Hrxrs - rz) + ry
     y = syssolver.AHA_chol \ rhs_y
 
     # Compute x solution
     HrxrsAy = zeros(T, n)
-    blk_inv_hess_prod!(HrxrsAy, rx + rs - A'*y, cones, cone_idxs)
-    x = HrxrsAy + rz
+    blk_inv_hess_prod!(HrxrsAy, G_inv .* (rx - A'*y) - rs, cones, cone_idxs)
+    x = G_inv .* (HrxrsAy - rz)
 
     # Compute z solution
-    z = -rx + A'*y
+    z = G_inv .* (rx - A'*y)
 
     return (x, y, z)
 end
