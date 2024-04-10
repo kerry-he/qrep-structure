@@ -105,7 +105,7 @@ end
 
 function main()
     # Define random instance of ea channel capacity problem
-    (ni, no, ne) = (2, 2, 2)
+    (ni, no, ne) = (4, 4, 4)
     V, W = randDegradableChannel(T, ni, no, ne)
     N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
     Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))

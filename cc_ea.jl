@@ -136,13 +136,11 @@ function main()
     Solvers.solve(solver)
     print_statistics(solver)
 
-
     model = eacc_qce_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
     print_statistics(solver)
-
 
     model = eacc_qre_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true)
