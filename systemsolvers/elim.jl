@@ -48,7 +48,7 @@ function Hypatia.Solvers.update_lhs(
     model = solver.model
     n = model.n    
 
-    G_inv = inv.(diag(model.G))
+    G_inv = if (model.G isa UniformScaling) model.G.λ else inv.(diag(model.G)) end
     A = model.A
     Ginv_A = G_inv .* A'
     HA = syssolver.HA
@@ -111,7 +111,7 @@ function solve_subsystem(
 
     n = model.n
     A = model.A
-    G_inv = inv.(diag(model.G))
+    G_inv = if (model.G isa UniformScaling) model.G.λ else inv.(diag(model.G)) end
     Ginv_A = G_inv .* A'    
 
     # Compute y solution

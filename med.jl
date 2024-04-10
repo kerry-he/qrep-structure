@@ -96,11 +96,10 @@ function main()
     L = 2
 
     model = med_problem(L)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     print_statistics(solver)
-
 
     model = med_naive_problem(L)
     solver = Solvers.Solver{T}(verbose = true)

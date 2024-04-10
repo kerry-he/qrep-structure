@@ -127,11 +127,11 @@ end
 
 function main()
     # Define random instance of ea channel capacity problem
-    (ni, no, ne) = (2, 2, 2)
+    (ni, no, ne) = (4, 4, 4)
     V = randStinespringOperator(T, ni, no, ne)
 
     model = eacc_problem(ni, no, ne, V)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     print_statistics(solver)

@@ -105,13 +105,13 @@ end
 
 function main()
     # Define random instance of ea channel capacity problem
-    (ni, no, ne) = (8, 8, 8)
+    (ni, no, ne) = (2, 2, 2)
     V, W = randDegradableChannel(T, ni, no, ne)
     N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
     Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
 
     model = qqcc_problem(ni, no, ne, N, Nc)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, rescale = false, preprocess = true, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     print_statistics(solver)
@@ -122,11 +122,11 @@ function main()
     Solvers.solve(solver)
     print_statistics(solver)
 
-    # model = qqcc_qre_problem(ni, no, ne, N, W)
-    # solver = Solvers.Solver{T}(verbose = true)
-    # Solvers.load(solver, model)
-    # Solvers.solve(solver)
-    # print_statistics(solver)  
+    model = qqcc_qre_problem(ni, no, ne, N, W)
+    solver = Solvers.Solver{T}(verbose = true)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    print_statistics(solver)  
 end
 
 main()
