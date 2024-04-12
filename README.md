@@ -5,11 +5,11 @@
 
 This repository contains code to solve quantum relative entropy programs of the form
 
-$$\min_{X\in\mathbb{H}^{n}} \quad S({\mathcal{G}(X)}\|{\mathcal{H}(X)}), \quad \text{subj. to} \quad A(X)=b, \ X\succeq0,$$
+$$\min_{X\in\mathbb{H}^{n}} \quad S({\mathcal{G}(X)}\\|{\mathcal{H}(X)}), \quad \text{subj. to} \quad A(X)=b, \ X\succeq0,$$
 
 by implementing efficient cone oracles for the cone
 
-$$  \mathcal{K}_{\textnormal{qre}}^{\mathcal{G}, \mathcal{H}} \coloneqq  \textnormal{cl}\{ (t, X)\in\mathbb{R}\times\mathbb{H}^n_{++} : t \geq S({\mathcal{G}(X)}\|{\mathcal{H}(X)}) \}, $$
+$$  \mathcal{K}_{\text{qre}}^{\mathcal{G}, \mathcal{H}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^n\_{\++} : t \geq S({\mathcal{G}(X)}\\|{\mathcal{H}(X)}) \\}, $$
 
 to use with the generic conic programming software [Hypatia](https://github.com/jump-dev/Hypatia.jl). We currently have implementations for the following variants of quantum relative entropy.
 
