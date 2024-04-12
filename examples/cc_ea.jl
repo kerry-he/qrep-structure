@@ -1,14 +1,13 @@
 using LinearAlgebra
-using SparseArrays
 
 import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
 
-include("cones/quantcondentr.jl")
-include("cones/quantmutualinf.jl")
-include("systemsolvers/elim.jl")
-include("utils/helper.jl")
+include("../cones/quantcondentr.jl")
+include("../cones/quantmutualinf.jl")
+include("../systemsolvers/elim.jl")
+include("../utils/helper.jl")
 
 import Random
 Random.seed!(1)

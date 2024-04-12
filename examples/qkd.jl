@@ -1,15 +1,14 @@
 using LinearAlgebra
-using SparseArrays
 import MAT
 
 import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
 
-include("cones/quantkeyrate.jl")
-include("cones/quantcondentr.jl")
-include("systemsolvers/elim.jl")
-include("utils/helper.jl")
+include("../cones/quantkeyrate.jl")
+include("../cones/quantcondentr.jl")
+include("../systemsolvers/elim.jl")
+include("../utils/helper.jl")
 
 import Random
 Random.seed!(1)
@@ -93,8 +92,8 @@ end
 
 function main()
     # Define rate distortion problem with entanglement fidelity distortion
-    f = MAT.matopen("data/DMCV_08_60_05_35.mat")
-    # f = MAT.matopen("data/dprBB84_02_14_30.mat")
+    # f = MAT.matopen("data/DMCV_08_60_05_35.mat")
+    f = MAT.matopen("data/dprBB84_02_14_30.mat")
     data = MAT.read(f, "Data")
 
     if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma_fr"][:]) == 0)
@@ -110,7 +109,7 @@ function main()
 
     # Use specialized dprBB4 oracle
     model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
-    solver = Solvers.Solver{T}(verbose = false, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
     println("Now using specialized dprBB84 cone oracle")

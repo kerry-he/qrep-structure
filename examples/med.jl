@@ -3,10 +3,9 @@ using LinearAlgebra
 import Hypatia
 import Hypatia.Cones
 import Hypatia.Solvers
-using Random
 
-include("cones/quantcondentr.jl")
-include("systemsolvers/elim.jl")
+include("../cones/quantcondentr.jl")
+include("../systemsolvers/elim.jl")
 
 T = Float64
 
