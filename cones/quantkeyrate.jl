@@ -725,15 +725,13 @@ function frechet_matrix!(
                 mul!(UHU, KU'[:, i], transpose(KU[j, :]), true, true)
             end
             UHU .*= D1_rt2 ./ rt2
-            temp2 .= UHU
-            temp2 .+= UHU'
+            @. temp2 = UHU + UHU'
             @views Hypatia.Cones.smat_to_svec!(temp[k, :], temp2, rt2)
             k += 1
 
             if R == Complex{T}
                 @. UHU *= -1im
-                temp2 .= UHU
-                temp2 .+= UHU'                
+                @. temp2 = UHU + UHU'          
                 @views Hypatia.Cones.smat_to_svec!(temp[k, :], temp2, rt2)
                 k += 1
             end

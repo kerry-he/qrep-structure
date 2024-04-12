@@ -67,6 +67,7 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     KHxK::Matrix{T}
     HYY_KHxK::Matrix{T}
     HYY_KHxK_chol::Cholesky{T, Matrix{T}}
+    schur::Matrix{T}
     schur_temp::Symmetric{T, Matrix{T}}
 
     Hx::Matrix{T}
@@ -166,6 +167,7 @@ function Hypatia.Cones.setup_extra_data!(
     cone.HYY = zeros(T, Y_dim, Y_dim)
     cone.KHxK = zeros(T, Y_dim, Y_dim)
     cone.HYY_KHxK = zeros(T, Y_dim, Y_dim)
+    cone.schur = zeros(T, Y_dim, Y_dim)    
     cone.schur_temp = Symmetric(zeros(T, Y_dim, Y_dim))
 
     cone.Hx = zeros(T, N, N)
@@ -327,30 +329,15 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
     (Λx, Ux) = cone.X_fact
     (Λy, Uy) = cone.Y_fact
     zi = inv(cone.z)
-    vecn = cone.vecn
-    vecn2 = cone.vecn2
     vecN = cone.vecN
     vecN2 = cone.vecN2
 
-    DPhi = cone.DPhi
-    H_inv_g_x = cone.H_inv_g_x
-
     UxK = cone.UxK
-    UxK_temp = cone.UxK_temp
-    HYY = cone.HYY
-    KHxK = cone.KHxK
-    HYY_KHxK = cone.HYY_KHxK
 
     matn = cone.matn
     matn2 = cone.matn2
     matn3 = cone.matn3
     matN = cone.matN
-    matN2 = cone.matN2
-    matN3 = cone.matN3
-    matN4 = cone.matN4
-    vecm = cone.vecm
-    vecm2 = cone.vecm2
-    vecM = cone.vecM
 
     Hx = cone.Hx
     Hy = cone.Hy
@@ -358,14 +345,29 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
     
     @. matN = 1 / (Λx' * Λx)
     @. Δ2x_comb_inv = 1 / (Δ2x_log*zi + matN)
+    rt2_Δ2x_comb_inv = sqrt.(Δ2x_comb_inv)
 
     # Construct matrices
-    k = 0
+    # Matrix of small entropy S(tr1[X])
+    k = 1
     @inbounds for j in 1:n, i in 1:j
+        mul!(Hy, Uy[i, :], Uy[j, :]')
+        if i != j
+            @. matn = Hy + Hy'
+            @. Hy = rt2i * matn
+        end
+
+        @. matn = cone.z * Hy / Δ2y_log
+        spectral_outer!(matn3, Uy, matn, matn2)
+        @views Hypatia.Cones.smat_to_svec!(cone.schur[:, k], matn3, rt2)
+
         k += 1
+    end
 
+    # Matrix of KS(X)K*
+    k = 1
+    @inbounds for j in 1:n, i in 1:j
         Hx .= 0
-
         if cone.sys == 1
             @inbounds for l = 0:cone.n1-1
                 copyto!(vecN, Ux[cone.n2*l + i, :])
@@ -377,39 +379,22 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
                 copyto!(vecN, Ux[cone.n2*(i - 1) + l, :])
                 copyto!(vecN2, Ux[cone.n2*(j - 1) + l, :])
                 mul!(Hx, vecN, vecN2', true, true)
-            end         
+            end
         end
             
         if i != j
             @. matN = Hx + Hx'
-            @. Hx = rt2i * matN          
+            @. Hx = rt2i * matN
         end
-        @views UxK_k = UxK[:, k]
-        Hypatia.Cones.smat_to_svec!(UxK_k, Hx, rt2)
+        Hx .*= rt2_Δ2x_comb_inv
+        @views Hypatia.Cones.smat_to_svec!(UxK[:, k], Hx, rt2)
 
-        copyto!(vecn, Uy[i, :])
-        copyto!(vecn2, Uy[j, :])
-        mul!(Hy, vecn, vecn2')
-        if i != j
-            @. matn = Hy + Hy'
-            @. Hy = rt2i * matn
-        end
-
-        
-        # HYY
-        @. matn = cone.z * Hy / Δ2y_log
-        spectral_outer!(matn3, Uy, matn, matn2)
-        @views HYY_k = HYY[:, k]
-        Hypatia.Cones.smat_to_svec!(HYY_k, matn3, rt2)
-
+        k += 1
     end
 
-    Hypatia.Cones.smat_to_svec!(vecM, Δ2x_comb_inv, 1)
-    @. UxK_temp = vecM * UxK
-    mul!(KHxK, UxK', UxK_temp)
-    @. HYY_KHxK = HYY - KHxK;
+    LinearAlgebra.BLAS.syrk!('U', 'T', -1., UxK, true, cone.schur)
 
-    sym_hess = Symmetric(HYY_KHxK, :U)
+    sym_hess = Symmetric(cone.schur, :U)
     cone.HYY_KHxK_chol = Hypatia.Cones.posdef_fact_copy!(cone.schur_temp, sym_hess)    
 
     cone.invhessprod_aux_updated = true
