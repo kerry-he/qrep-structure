@@ -428,101 +428,49 @@ function Hypatia.Cones.inv_hess_prod!(
     (n1, n2, sys) = (cone.n1, cone.n2, cone.sys)
 
     rt2 = cone.rt2
-    Δ2x_comb_inv = cone.Δ2x_comb_inv
-    (Λx, Ux) = cone.X_fact
+    Ux = cone.X_fact.vectors
 
-    DPhi = cone.DPhi
-    HYY_KHxK = cone.HYY_KHxK
-    H_inv_g_x = cone.H_inv_g_x
+    p = size(arr, 2)
 
-    matn = cone.matn
-    matN = cone.matN
-    matN2 = cone.matN2
-    matN3 = cone.matN3
-    matN4 = cone.matN4
-    vecm = cone.vecm
-    vecm2 = cone.vecm2
+    Wx_k = zeros(T, cone.N, cone.N)
+    Wy_k = zeros(T, cone.n, cone.n)
 
-    # Wx_k = zeros(T, cone.N, cone.N)
-    # wx_k = zeros(T, cone.n, cone.n)
-    
+    Hx = cone.Hx
+    Wx = [zeros(T, cone.N, cone.N) for i in 1:p]
+    Wy = zeros(T, cone.Y_dim, p)
 
-    # Ht = arr[1, :]
-    # Hx = arr[cone.X_idxs, :]
-    # Wx = zeros(T, cone.X_dim, p)
-    # wx = zeros(T, cone.Y_dim, p)
-
-    # @inbounds for k in axes(arr, 2)
+    @inbounds for k in axes(arr, 2)
         
-    #     # Get input direction
-    #     Ht = arr[1, j]
-    #     @views Hypatia.Cones.svec_to_smat!(Hx, arr[cone.X_idxs, j], rt2)
-    #     LinearAlgebra.copytri!(Hx, 'U')
-    #     Wx_k .= Hx + cone.DPhi * Ht
-        
-    #     pTr!(wx_k, Ux * ( cone.Δ2x_comb_inv .* (Ux' * Wx_k * Ux) ) * Ux', sys, (n1, n2))
-    #     Hypatia.Cones.smat_to_svec!(wx[:, k], wx_k, rt2)
-
-    # end
-
-    # wx = cone.HYY_KHxK_chol \ wx
-
-    # @inbounds for k in axes(arr, 2)
-
-    #     # Get input direction
-    #     Hypatia.Cones.svec_to_smat!(wx_k, wx[:, k], rt2)
-    #     LinearAlgebra.copytri!(wx_k, 'U', true)
-
-    #     idKron!(Wx_k, wx_k, cone.sys, (cone.n1, cone.n2))
-    #     Wx_k = -Ux * ( cone.Δ2x_comb_inv .* (Ux' * Wx_k * Ux) ) * Ux'
-                
-    #     # Solve linear system
-    #     @views Hypatia.Cones.smat_to_svec!(prod[cone.X_idxs, k], Wx_k, rt2)
-    #     prod[cone.X_idxs, k] .+= Wx[:, k]
-    #     prod[1, k] = cone.z * cone.z * Ht[k] + dot(prod[cone.X_idxs, k], cone.DPhi)
-
-    # end    
-
-    @inbounds for j in axes(arr, 2)
-
-        @views H = arr[:, j]
-
-        # Get slices of vector and product
-        Ht = H[1]
-        @views Hypatia.Cones.svec_to_smat!(Hx, H[cone.X_idxs], rt2)
+        # Get input direction
+        Ht = arr[1, k]
+        @views Hypatia.Cones.svec_to_smat!(Hx, arr[cone.X_idxs, k], rt2)
         LinearAlgebra.copytri!(Hx, 'U')
+        @. Wx[k] = Hx + cone.DPhi * Ht
 
-
-        # Compute combined direction
-        @. matN3 = Ht * DPhi
-        @. matN3 += Hx
-
-        # Block elimination for variable
-        spectral_outer!(matN, Ux', matN3, matN2)
-        @. matN *= Δ2x_comb_inv
-        spectral_outer!(matN3, Ux, matN, matN2)
-
-        pTr!(matn, matN3, cone.sys, (cone.n1, cone.n2))
-        Hypatia.Cones.smat_to_svec!(vecm, matn, rt2)
-        vecm .*= -1
-        
-        vecm2 .= cone.HYY_KHxK_chol \ vecm
-
-        Hypatia.Cones.svec_to_smat!(matn, vecm2, rt2)
-        LinearAlgebra.copytri!(matn, 'U')
-        idKron!(matN, matn, cone.sys, (cone.n1, cone.n2))
-        spectral_outer!(matN4, Ux', matN, matN2)
-        matN4 .*= Δ2x_comb_inv
-        spectral_outer!(matN, Ux, matN4, matN2)
-        @. matN3 -= matN
-
-        prod[1, j] = Ht * cone.z^2 + dot(matN3, DPhi)
-
-        @views H_inv_w_x = prod[cone.X_idxs, j]
-        Hypatia.Cones.smat_to_svec!(H_inv_w_x, matN3, rt2)
+        Wx[k] = Ux * (cone.Δ2x_comb_inv .* (Ux' * Wx[k] * Ux)) * Ux'
+        pTr!(Wy_k, Wx[k], cone.sys, (cone.n1, cone.n2))
+        @views Hypatia.Cones.smat_to_svec!(Wy[:, k], -Wy_k, rt2)
 
     end
+
+    Wy = cone.HYY_KHxK_chol \ Wy
         
+    @inbounds for k in axes(arr, 2)
+
+        # Get input direction
+        Ht = arr[1, k]
+        Hypatia.Cones.svec_to_smat!(Wy_k, Wy[:, k], rt2)
+        LinearAlgebra.copytri!(Wy_k, 'U', true)
+
+        idKron!(Wx_k, Wy_k, sys, (n1, n2))
+        Wx[k] .-= Ux * ( cone.Δ2x_comb_inv .* (Ux' * Wx_k * Ux) ) * Ux'
+
+        # Solve linear system
+        @views Hypatia.Cones.smat_to_svec!(prod[cone.X_idxs, k], Wx[k], rt2)
+        prod[1, k] = cone.z * cone.z * Ht[k] + dot(Wx[k], cone.DPhi)
+
+    end    
+
     return prod
 end
 
