@@ -40,6 +40,7 @@ function pTr!(
     sys::Int = 2, 
     dim::Union{Tuple{Int, Int}, Nothing} = nothing
 ) where {T <: Real}
+    # Inplace partial trace operator
     if dim === nothing
         n1 = n2 = isqrt(size(X, 1))
     else
@@ -69,12 +70,26 @@ function pTr!(
     return ptrX
 end
 
+function pTr(
+    X::Matrix{T}, 
+    sys::Int = 2, 
+    dim::Union{Tuple{Int, Int}, Nothing} = nothing
+) where {T <: Real}
+    # Partial trace operator
+    if sys == 2
+        return pTr!(zeros(T, dim[1], dim[1]), X, sys, dim)
+    else
+        return pTr!(zeros(T, dim[2], dim[2]), X, sys, dim)
+    end
+end
+
 function idKron!(
     kronI::Matrix{T}, 
     X::Matrix{T}, 
     sys::Int = 2, 
     dim::Union{Tuple{Int, Int}, Nothing} = nothing
 ) where {T <: Real}
+    # Inplace Kroneker product input matrix X with the identity matrix
     if dim === nothing
         n1 = n2 = isqrt(size(kronI, 1))
     else
@@ -92,6 +107,16 @@ function idKron!(
     end
 
     return kronI
+end
+
+function idKron(
+    X::Matrix{T}, 
+    sys::Int = 2, 
+    dim::Union{Tuple{Int, Int}, Nothing} = nothing
+) where {T <: Real}
+    # Kroneker product input matrix X with the identity matrix
+    n = dim[1] * dim[2]
+    return idKron!(zeros(T, n, n), X, sys, dim)
 end
 
 function randDensityMatrix(R::Type, n::Int)

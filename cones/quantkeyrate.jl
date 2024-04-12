@@ -363,6 +363,7 @@ function Hypatia.Cones.hess_prod!(
                  @inbounds D2PhiH -= sum([congr(U * (D1 .* UHU) * U', K_list, true) for (U, D1, UHU, K_list)
                  in zip(Uzgx_blk, cone.Δ2zgx_log_blk, UkzZKHUkz_blk, cone.ZK_list_blk)])
 
+        # Hessian product of barrier
         prodt = zi * zi * (Ht - dot(Hx_vec, cone.DPhi))
         prodX = -prodt * cone.DPhi + Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), zi * D2PhiH + cone.Xi * Hx * cone.Xi, cone.rt2)
 

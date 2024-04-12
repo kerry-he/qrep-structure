@@ -58,7 +58,7 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     Δ3y_log::Array{T, 3}
 
     UyXUy::Matrix{T}
-    DPhiX::Matrix{T}
+    DPhi::Matrix{T}
     H_inv_g_x::Matrix{T}
     DPhi_H_DPhi::T
     UxK::Matrix{T}
@@ -69,8 +69,8 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     HYY_KHxK_chol::Cholesky{T, Matrix{T}}
     schur_temp::Symmetric{T, Matrix{T}}
 
-    HX::Matrix{T}
-    HY::Matrix{T}
+    Hx::Matrix{T}
+    Hy::Matrix{T}
 
     matn::Matrix{T}
     matn2::Matrix{T}
@@ -158,7 +158,7 @@ function Hypatia.Cones.setup_extra_data!(
     cone.Δ3y_log = zeros(T, n, n, n)
 
     cone.UyXUy = zeros(T, n, n)
-    cone.DPhiX = zeros(T, N, N)
+    cone.DPhi = zeros(T, N, N)
     cone.H_inv_g_x = zeros(T, N, N)
     cone.DPhi_H_DPhi = 0
     cone.UxK = zeros(T, X_dim, Y_dim)
@@ -168,8 +168,8 @@ function Hypatia.Cones.setup_extra_data!(
     cone.HYY_KHxK = zeros(T, Y_dim, Y_dim)
     cone.schur_temp = Symmetric(zeros(T, Y_dim, Y_dim))
 
-    cone.HX = zeros(T, N, N)
-    cone.HY = zeros(T, n, n)
+    cone.Hx = zeros(T, N, N)
+    cone.Hy = zeros(T, n, n)
 
     cone.matn = zeros(T, n, n)
     cone.matn2 = zeros(T, n, n)
@@ -197,13 +197,9 @@ function Hypatia.Cones.set_initial_point!(
     arr::AbstractVector{T},
     cone::QuantCondEntropy{T},
 ) where {T <: Real}
-    arr .= 0
-    rt2 = cone.rt2
-
     arr[1] = 0.0
-    X = Matrix{T}(I, cone.N, cone.N)
-    @views arr_X = arr[cone.X_idxs]
-    Hypatia.Cones.smat_to_svec!(arr_X, X, rt2)
+    X0 = Matrix{T}(I, cone.N, cone.N)
+    @views Hypatia.Cones.smat_to_svec!(arr[cone.X_idxs], X0, cone.rt2)
 
     return arr
 end
@@ -211,6 +207,7 @@ end
 function Hypatia.Cones.update_feas(cone::QuantCondEntropy{T}) where {T <: Real}
     @assert !cone.feas_updated
     point = cone.point
+    (n1, n2, sys) = (cone.n1, cone.n2, cone.sys)
 
     cone.is_feas = false
     @views Hypatia.Cones.svec_to_smat!(cone.X, point[cone.X_idxs], cone.rt2)
@@ -220,7 +217,6 @@ function Hypatia.Cones.update_feas(cone::QuantCondEntropy{T}) where {T <: Real}
     XH = Hermitian(cone.X, :U)
     YH = Hermitian(cone.Y, :U)
     if isposdef(XH)
-        # TODO use LAPACK syev! instead of syevr! for efficiency
         X_fact = cone.X_fact = eigen(XH)
         Y_fact = cone.Y_fact = eigen(YH)
         if isposdef(X_fact) && isposdef(Y_fact)
@@ -234,8 +230,7 @@ function Hypatia.Cones.update_feas(cone::QuantCondEntropy{T}) where {T <: Real}
                 @. λ_log = log(λ)
                 spectral_outer!(X_log, vecs, λ_log, mat)
             end
-            idKron!(cone.matN, cone.Y_log, cone.sys, (cone.n1, cone.n2))
-            @. cone.XY_log = cone.X_log - cone.matN
+            cone.XY_log .= cone.X_log .- idKron(cone.Y_log, sys, (n1, n2))
             cone.z = point[1] - dot(XH, Hermitian(cone.XY_log, :U))
             cone.is_feas = (cone.z > 0)
         end
@@ -250,22 +245,15 @@ function Hypatia.Cones.update_grad(cone::QuantCondEntropy)
     rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
     Xi = cone.Xi
+
+    spectral_outer!(Xi, Ux, inv.(Λx), zeros(T, size(Xi)))
+
     zi = inv(cone.z)
-
-    DPhiX = cone.DPhiX
-
-    matN = cone.matN
-
-    spectral_outer!(Xi, Ux, inv.(Λx), matN)
+    @. cone.DPhi = cone.XY_log
 
     g = cone.grad
     g[1] = -zi;
-
-    @views g_x = g[cone.X_idxs]
-
-    @. DPhiX = cone.XY_log
-    @. matN = DPhiX * zi - Xi
-    Hypatia.Cones.smat_to_svec!(g_x, matN, rt2)
+    @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], cone.DPhi * zi - Xi, rt2)
 
     cone.grad_updated = true
     return cone.grad
@@ -275,8 +263,8 @@ function update_hessprod_aux(cone::QuantCondEntropy)
     @assert !cone.hessprod_aux_updated
     @assert cone.grad_updated
 
-    (Λx, Ux) = cone.X_fact
-    (Λy, Uy) = cone.Y_fact
+    Λx = cone.X_fact.values
+    Λy = cone.Y_fact.values
 
     Δ2_log!(cone.Δ2x_log, Λx, cone.Λx_log)
     Δ2_log!(cone.Δ2y_log, Λy, cone.Λy_log)
@@ -294,70 +282,34 @@ function Hypatia.Cones.hess_prod!(
     @assert cone.grad_updated
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
 
+    (n1, n2, sys) = (cone.n1, cone.n2, cone.sys)
+
     rt2 = cone.rt2
-    Δ2x_log = cone.Δ2x_log
-    Δ2y_log = cone.Δ2y_log
-    (Λx, Ux) = cone.X_fact
-    (Λy, Uy) = cone.Y_fact
-    Xi = cone.Xi
+    Ux = cone.X_fact.vectors
+    Uy = cone.Y_fact.vectors
     zi = inv(cone.z)
 
-    DPhiX = cone.DPhiX
+    Hx = cone.Hx
+    Hy = cone.Hy
 
-    HX = cone.HX
-    HY = cone.HY
+    @inbounds for j in axes(arr, 2)
+        # Get input direction
+        Ht = arr[1, j]
+        @views Hypatia.Cones.svec_to_smat!(Hx, arr[cone.X_idxs, j], rt2)
+        LinearAlgebra.copytri!(Hx, 'U')
+        pTr!(Hy, Hx, cone.sys, (cone.n1, cone.n2))
 
-    matn = cone.matn
-    matn2 = cone.matn2
-    matn3 = cone.matn3
-    matn4 = cone.matn4
-    matN = cone.matN
-    matN2 = cone.matN2
-    matN3 = cone.matN3
+        # Hessian product of quantum entropies
+        D2PhiH = Ux * ( cone.Δ2x_log .* (Ux' * Hx * Ux) ) * Ux'
+        D2PhiH -= idKron(Uy * ( cone.Δ2y_log .* (Uy' * Hy * Uy) ) * Uy', sys, (n1, n2))
 
-    @inbounds for j in 1:size(arr, 2)
+        # Hessian product of barrier
+        prodt = zi * zi * (Ht - dot(Hx, cone.DPhi))
+        prodX = -prodt * cone.DPhi + zi * D2PhiH + cone.Xi * Hx * cone.Xi
 
-        @views H = arr[:, j]
-
-        # Get slices of vector and product
-        Ht = H[1]
-        @views Hypatia.Cones.svec_to_smat!(HX, H[cone.X_idxs], rt2)
-        LinearAlgebra.copytri!(HX, 'U')
-        pTr!(HY, HX, cone.sys, (cone.n1, cone.n2))
-
-        @views prod_x = prod[cone.X_idxs, j]
-
-        # t
-        DPhiY_HZ = dot(DPhiX, HX)
-        prod[1, j] = Ht - DPhiY_HZ
-        prod[1, j] *= zi*zi
-        
-        # X
-        fac = (DPhiY_HZ - Ht) * zi^2
-        # D2PhiXXH
-        spectral_outer!(matN, Ux', HX, matN2)
-        # spectral_outer!(matN, Ux', Symmetric(HX, :U), matN2)
-        @. matN *= Δ2x_log
-        spectral_outer!(matN3, Ux, matN, matN2)
-        # spectral_outer!(matN3, Ux, Symmetric(matN, :U), matN2)
-        # D2PhiXYH
-        spectral_outer!(matn4, Uy', HY, matn)
-        # spectral_outer!(matn4, Uy', Symmetric(HY, :U), matn)
-        @. matn = Δ2y_log * matn4
-        spectral_outer!(matn3, Uy, matn, matn2)
-        # spectral_outer!(matn3, Uy, Symmetric(matn, :U), matn2)
-        idKron!(matN2, matn3, cone.sys, (cone.n1, cone.n2))
-        # D2XH = D2XtH + D2XXH + D2XYH;
-        @. matN = zi * (matN3 - matN2)
-        @. matN += fac * DPhiX
-        spectral_outer!(matN2, Xi, HX, matN3)
-        # spectral_outer!(matN2, Xi, Symmetric(HX, :U), matN3)
-        @. matN += matN2
-        Hypatia.Cones.smat_to_svec!(prod_x, matN, rt2)     
-
+        prod[1, j] = prodt
+        @views Hypatia.Cones.smat_to_svec!(prod[cone.X_idxs, j], prodX, rt2)
     end
-
-
 
     return prod
 end
@@ -380,7 +332,7 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
     vecN = cone.vecN
     vecN2 = cone.vecN2
 
-    DPhiX = cone.DPhiX
+    DPhi = cone.DPhi
     H_inv_g_x = cone.H_inv_g_x
 
     UxK = cone.UxK
@@ -400,56 +352,53 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
     vecm2 = cone.vecm2
     vecM = cone.vecM
 
-    HX = cone.HX
-    HY = cone.HY
+    Hx = cone.Hx
+    Hy = cone.Hy
     rt2i = 1 / rt2
     
     @. matN = 1 / (Λx' * Λx)
     @. Δ2x_comb_inv = 1 / (Δ2x_log*zi + matN)
 
     # Construct matrices
-    # TODO
     k = 0
     @inbounds for j in 1:n, i in 1:j
         k += 1
 
-        HX .= 0
+        Hx .= 0
 
         if cone.sys == 1
             @inbounds for l = 0:cone.n1-1
                 copyto!(vecN, Ux[cone.n2*l + i, :])
                 copyto!(vecN2, Ux[cone.n2*l + j, :])
-                mul!(HX, vecN, vecN2', true, true)
+                mul!(Hx, vecN, vecN2', true, true)
             end
         else
             @inbounds for l = 1:cone.n2
                 copyto!(vecN, Ux[cone.n2*(i - 1) + l, :])
                 copyto!(vecN2, Ux[cone.n2*(j - 1) + l, :])
-                mul!(HX, vecN, vecN2', true, true)
+                mul!(Hx, vecN, vecN2', true, true)
             end         
         end
             
         if i != j
-            @. matN = HX + HX'
-            @. HX = rt2i * matN          
+            @. matN = Hx + Hx'
+            @. Hx = rt2i * matN          
         end
         @views UxK_k = UxK[:, k]
-        Hypatia.Cones.smat_to_svec!(UxK_k, HX, rt2)
+        Hypatia.Cones.smat_to_svec!(UxK_k, Hx, rt2)
 
         copyto!(vecn, Uy[i, :])
         copyto!(vecn2, Uy[j, :])
-        mul!(HY, vecn, vecn2')
-        # HY .= Uy[i, :] * Uy[j, :]'
+        mul!(Hy, vecn, vecn2')
         if i != j
-            @. matn = HY + HY'
-            @. HY = rt2i * matn
+            @. matn = Hy + Hy'
+            @. Hy = rt2i * matn
         end
 
         
         # HYY
-        @. matn = cone.z * HY / Δ2y_log
+        @. matn = cone.z * Hy / Δ2y_log
         spectral_outer!(matn3, Uy, matn, matn2)
-        # spectral_outer!(matn3, Uy, Symmetric(matn, :U), matn2)
         @views HYY_k = HYY[:, k]
         Hypatia.Cones.smat_to_svec!(HYY_k, matn3, rt2)
 
@@ -476,11 +425,13 @@ function Hypatia.Cones.inv_hess_prod!(
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.invhessprod_aux_updated || update_invhessprod_aux(cone)
 
+    (n1, n2, sys) = (cone.n1, cone.n2, cone.sys)
+
     rt2 = cone.rt2
     Δ2x_comb_inv = cone.Δ2x_comb_inv
     (Λx, Ux) = cone.X_fact
 
-    DPhiX = cone.DPhiX
+    DPhi = cone.DPhi
     HYY_KHxK = cone.HYY_KHxK
     H_inv_g_x = cone.H_inv_g_x
 
@@ -492,35 +443,64 @@ function Hypatia.Cones.inv_hess_prod!(
     vecm = cone.vecm
     vecm2 = cone.vecm2
 
-    HX = cone.HX
-    HY = cone.HY
+    # Wx_k = zeros(T, cone.N, cone.N)
+    # wx_k = zeros(T, cone.n, cone.n)
+    
 
-    # println()
-    # println("epi=", cone.point[1], ";")
-    # println("X=", cone.X, ";")
-    # println("Y=", cone.Y, ";")
+    # Ht = arr[1, :]
+    # Hx = arr[cone.X_idxs, :]
+    # Wx = zeros(T, cone.X_dim, p)
+    # wx = zeros(T, cone.Y_dim, p)
 
-    @inbounds for j in 1:size(arr, 2)
+    # @inbounds for k in axes(arr, 2)
+        
+    #     # Get input direction
+    #     Ht = arr[1, j]
+    #     @views Hypatia.Cones.svec_to_smat!(Hx, arr[cone.X_idxs, j], rt2)
+    #     LinearAlgebra.copytri!(Hx, 'U')
+    #     Wx_k .= Hx + cone.DPhi * Ht
+        
+    #     pTr!(wx_k, Ux * ( cone.Δ2x_comb_inv .* (Ux' * Wx_k * Ux) ) * Ux', sys, (n1, n2))
+    #     Hypatia.Cones.smat_to_svec!(wx[:, k], wx_k, rt2)
+
+    # end
+
+    # wx = cone.HYY_KHxK_chol \ wx
+
+    # @inbounds for k in axes(arr, 2)
+
+    #     # Get input direction
+    #     Hypatia.Cones.svec_to_smat!(wx_k, wx[:, k], rt2)
+    #     LinearAlgebra.copytri!(wx_k, 'U', true)
+
+    #     idKron!(Wx_k, wx_k, cone.sys, (cone.n1, cone.n2))
+    #     Wx_k = -Ux * ( cone.Δ2x_comb_inv .* (Ux' * Wx_k * Ux) ) * Ux'
+                
+    #     # Solve linear system
+    #     @views Hypatia.Cones.smat_to_svec!(prod[cone.X_idxs, k], Wx_k, rt2)
+    #     prod[cone.X_idxs, k] .+= Wx[:, k]
+    #     prod[1, k] = cone.z * cone.z * Ht[k] + dot(prod[cone.X_idxs, k], cone.DPhi)
+
+    # end    
+
+    @inbounds for j in axes(arr, 2)
 
         @views H = arr[:, j]
 
         # Get slices of vector and product
         Ht = H[1]
-        @views Hypatia.Cones.svec_to_smat!(HX, H[cone.X_idxs], rt2)
-        LinearAlgebra.copytri!(HX, 'U')
-        pTr!(HY, HX, cone.sys, (cone.n1, cone.n2))
+        @views Hypatia.Cones.svec_to_smat!(Hx, H[cone.X_idxs], rt2)
+        LinearAlgebra.copytri!(Hx, 'U')
 
 
         # Compute combined direction
-        @. matN3 = Ht * DPhiX
-        @. matN3 += HX
+        @. matN3 = Ht * DPhi
+        @. matN3 += Hx
 
         # Block elimination for variable
         spectral_outer!(matN, Ux', matN3, matN2)
-        # spectral_outer!(matN, Ux_adjoint, symmWX, matN2)
         @. matN *= Δ2x_comb_inv
         spectral_outer!(matN3, Ux, matN, matN2)
-        # spectral_outer!(matN3, Ux, Symmetric(matN, :U), matN2)
 
         pTr!(matn, matN3, cone.sys, (cone.n1, cone.n2))
         Hypatia.Cones.smat_to_svec!(vecm, matn, rt2)
@@ -532,13 +512,11 @@ function Hypatia.Cones.inv_hess_prod!(
         LinearAlgebra.copytri!(matn, 'U')
         idKron!(matN, matn, cone.sys, (cone.n1, cone.n2))
         spectral_outer!(matN4, Ux', matN, matN2)
-        # spectral_outer!(matN4, Ux', Symmetric(matN, :U), matN2)
         matN4 .*= Δ2x_comb_inv
         spectral_outer!(matN, Ux, matN4, matN2)
-        # spectral_outer!(matN, Ux, Symmetric(matN4, :U), matN2)
         @. matN3 -= matN
 
-        prod[1, j] = Ht * cone.z^2 + dot(matN3, DPhiX)
+        prod[1, j] = Ht * cone.z^2 + dot(matN3, DPhi)
 
         @views H_inv_w_x = prod[cone.X_idxs, j]
         Hypatia.Cones.smat_to_svec!(H_inv_w_x, matN3, rt2)
@@ -564,85 +542,44 @@ function Hypatia.Cones.dder3(cone::QuantCondEntropy{T}, dir::AbstractVector{T}) 
     cone.hessprod_aux_updated || update_hessprod_aux(cone)
     cone.dder3_aux_updated || update_dder3_aux(cone)
 
-    n = cone.n
-    N = cone.N
+    (n1, n2, sys) = (cone.n1, cone.n2, cone.sys)
+
     rt2 = cone.rt2
-    Δ2x_log = cone.Δ2x_log
-    Δ3x_log = cone.Δ3x_log
-    Δ2y_log = cone.Δ2y_log
-    Δ3y_log = cone.Δ3y_log
-    (Λx, Ux) = cone.X_fact
-    (Λy, Uy) = cone.Y_fact
-    Xi = cone.Xi
-    zi = inv(cone.z)
-
-    DPhiX = cone.DPhiX
-
-    matn = cone.matn
-    matn2 = cone.matn2
-    matn3 = cone.matn3
-    matN = cone.matN
-    matN2 = cone.matN2
-    matN3 = cone.matN3
-
-    HX = cone.HX
-    HY = cone.HY
+    Ux = cone.X_fact.vectors
+    Uy = cone.Y_fact.vectors
+    Hx = cone.Hx
+    Hy = cone.Hy
 
     dder3 = cone.dder3
 
-    # Get slices of vector and product
+    # Get input direction
     Ht = dir[1]
-    @views HZ = dir[2:end]
-    @views Hypatia.Cones.svec_to_smat!(HX, dir[cone.X_idxs], rt2)
-    LinearAlgebra.copytri!(HX, 'U')
-    pTr!(HY, HX, cone.sys, (cone.n1, cone.n2))
+    @views Hypatia.Cones.svec_to_smat!(Hx, dir[cone.X_idxs], rt2)
+    LinearAlgebra.copytri!(Hx, 'U')
+    pTr!(Hy, Hx, cone.sys, (cone.n1, cone.n2))
 
-    # Precompute rotated directions
-    UxHxUx = zeros(T, N, N)
-    UyHyUy = zeros(T, n, n)
-    
-    spectral_outer!(UxHxUx, Ux', HX, matN)
-    spectral_outer!(UyHyUy, Uy', HY, matn)
-    # spectral_outer!(UxHxUx, Ux', Symmetric(HX, :U), matN)
-    # spectral_outer!(UyHyUy, Uy', Symmetric(HY, :U), matn)
+    UHUx = Ux' * Hx * Ux
+    UHUy = Uy' * Hy * Uy
 
-    # Hessian product of conditional entropy
-    D2PhiXXH = zeros(T, N, N)
+    # Derivatives of mutual information
+    D2PhiH  = Ux * ( cone.Δ2x_log .* (Ux' * Hx * Ux) ) * Ux'
+    D2PhiH -= idKron(Uy * ( cone.Δ2y_log .* (Uy' * Hy * Uy) ) * Uy', sys, (n1, n2))
 
-    @. matN = UxHxUx * Δ2x_log
-    spectral_outer!(matN3, Ux, matN, matN2)
-    # spectral_outer!(matN3, Ux, Symmetric(matN, :U), matN2)
-    @. matn = UyHyUy * Δ2y_log
-    spectral_outer!(matn3, Uy, matn, matn2)
-    # spectral_outer!(matn3, Uy, Symmetric(matn, :U), matn2)
-    idKron!(matN2, matn3, cone.sys, (cone.n1, cone.n2))
-
-    @. D2PhiXXH = matN3 - matN2
-
-
-    # Third directional derivatives of conditional entropy
-    D3PhiXXX = zeros(T, N, N)
-    Δ2_frechet!(D3PhiXXX, UxHxUx .* Δ3x_log, Ux, UxHxUx, matN2, matN3)
-    Δ2_frechet!(matn, UyHyUy .* Δ3y_log, Uy, UyHyUy, matn2, matn3)
-    idKron!(matN, matn, cone.sys, (cone.n1, cone.n2))
-    @. D3PhiXXX -= matN
-
+    D3PhiHH  = Δ2_frechet(UHUx .* cone.Δ3x_log, Ux, UHUx)
+    D3PhiHH -= idKron(Δ2_frechet(UHUy .* cone.Δ3y_log, Uy, UHUy), sys, (n1, n2))
 
     # Third directional derivatives of the barrier function
-    DPhiZ_H = dot(DPhiX, HX)
-    D2PhiZ_HH = dot(D2PhiXXH, HX)
-    χ = Ht - DPhiZ_H
-    dder3_t = -2 * zi^3 * χ^2 - zi^2 * D2PhiZ_HH;
+    DPhiH = dot(cone.DPhi, Hx)
+    D2PhiHH = dot(D2PhiH, Hx)
+    χ = Ht - DPhiH
+    zi = 1 / cone.z
 
-    matN = -dder3_t * DPhiX -
-           2 * zi^2 * χ * (D2PhiXXH) +
-           zi * (D3PhiXXX) -
-           2*Xi * HX * Xi * HX * Xi;
-
-    dder3[1] = dder3_t
-
-    @views dder3_X = dder3[cone.X_idxs]
-    @views Hypatia.Cones.smat_to_svec!(dder3_X, matN, rt2)
+    dder3[1]  = -(2 * zi^3 * χ^2) - (zi^2 * D2PhiHH)
+    temp   = -dder3[1] * cone.DPhi
+    temp .-= 2 * zi^2 * χ * D2PhiH
+    temp .+= zi * D3PhiHH
+    temp .-= 2 * cone.Xi * Hx * cone.Xi * Hx * cone.Xi
+    @views Hypatia.Cones.smat_to_svec!(dder3[cone.X_idxs], temp, cone.rt2)
 
     @. dder3 *= -0.5
 
@@ -771,4 +708,19 @@ function spectral_outer!(
     mul!(temp, vecs, Diagonal(diag))
     mul!(mat, temp, vecs')
     return mat
+end
+
+function Δ2_frechet(
+    S_Δ3::Array{T, 3}, 
+    U::Matrix{T}, 
+    UHU::Matrix{T}, 
+) where {T <: Real}
+    out = zeros(T, size(U))
+
+    @inbounds for k in axes(S_Δ3, 3)
+        @views out[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
+    end
+    out .*= 2;
+
+    return U * out * U'
 end

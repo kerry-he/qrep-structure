@@ -15,7 +15,7 @@ This cone is called using `QuantCondEntropy{T}(n, m, k)` where
 ### Quantum mutual information
 We implement a cone for the epigraph of the (homogenized) quantum mutual information
 
-$$  \mathcal{K}_{\text{qce}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^{n}\_{\++} : t \geq -S(X) - S(\text{tr}_2[VXV^\dagger]) + S(\text{tr}_1[VXV^\dagger]) + S(\text{tr}[X]) \\}. $$
+$$  \mathcal{K}_{\text{qmi}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^{n}\_{\++} : t \geq -S(X) - S(\text{tr}_2[VXV^\dagger]) + S(\text{tr}_1[VXV^\dagger]) + S(\text{tr}[X]) \\}. $$
 
 This cone is called using `QuantMutualInformation{T}(n, m, p, V)` where
 - `n`: Dimension of input system
@@ -26,7 +26,7 @@ This cone is called using `QuantMutualInformation{T}(n, m, p, V)` where
 ### Quantum coherent information
 We implement a cone for the epigraph of the quantum coherent information for degradable channels, i.e., channels $\mathcal{N}$ such that the complementary channel $\mathcal{N}\_{\text{c}}$ satisfies $\mathcal{N}\_{\text{c}} = \Xi \circ \mathcal{N}$ for some channel $\Xi$.
 
-$$  \mathcal{K}_{\text{qce}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^{n}\_{\++} : t \geq -S(\mathcal{N}(X)) + S(\text{tr}_1[W\mathcal{N}(X)W^\dagger]) \\}. $$
+$$  \mathcal{K}_{\text{qci}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^{n}\_{\++} : t \geq -S(\mathcal{N}(X)) + S(\mathcal{N}\_{\text{c}}) \\}. $$
 
 This cone is called using `QuantMutualInformation{T}(n, m, p, N, Nc)` where
 - `n`: Dimension of input system of $\mathcal{N}$
@@ -38,7 +38,7 @@ This cone is called using `QuantMutualInformation{T}(n, m, p, N, Nc)` where
 ### Quantum key rate
 We implement a cone to compute for quantum key rates. This is done by implementing the cone
 
-$$  \mathcal{K}_{\text{qce}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^{n}\_{\++} : t \geq -S(\mathcal{G}(X)) + S(\mathcal{Z}(\mathcal{G}(X))) \\}. $$
+$$  \mathcal{K}_{\text{qkd}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^{n}\_{\++} : t \geq -S(\mathcal{G}(X)) + S(\mathcal{Z}(\mathcal{G}(X))) \\}. $$
 
 Where $\mathcal{Z}$ is a pinching channel, i.e., maps off-diagonal blocks of a matrix to zero. This cone is called using `QuantKeyRate{T, R}(Klist, Zlist)` where
 - `Klist`: List of Kraus operators $K_i$ of $\mathcal{G}$, where $\mathcal{G}(X)=\sum_i K_i X K_i^\dagger$

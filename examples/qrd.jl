@@ -97,11 +97,11 @@ function main()
     print_statistics(solver)
 
 
-    model = qrd_naive_problem(n, n, Z, Δ, D)
-    solver = Solvers.Solver{T}(verbose = true)
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver)
+    # model = qrd_naive_problem(n, n, Z, Δ, D)
+    # solver = Solvers.Solver{T}(verbose = true)
+    # Solvers.load(solver, model)
+    # Solvers.solve(solver)
+    # print_statistics(solver)
 end
 
 main()

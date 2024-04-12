@@ -20,6 +20,12 @@ to use with the generic conic programming software [Hypatia](https://github.com/
 | Quantum coherent information (for degradable channels) | `QuantCoherentInformation{T}(n, m, p, N, Nc)` |
 | Quantum key rate | `QuantKeyRate{T, R}(Klist, Zlist)` |
 
+See the [cones folder](https://github.com/kerry-he/qrep-structure/tree/main/cones) for more detail about these cone oracles.
+
+## Getting started
+
+The main dependencies of our code are Julia and Hypatia. This can be installed by following the installation instructions [here](https://github.com/jump-dev/Hypatia.jl/tree/master). 
+
 ## Usage
 
 Here, we show an example of how we can compute the entanglement assisted channel capacity of a qubit amplitude damping channel from [here](https://github.com/hfawzi/cvxquad/blob/master/examples/entanglement_assisted_capacity.m). 

@@ -302,6 +302,7 @@ function Hypatia.Cones.hess_prod!(
         D2PhiH -= cone.Nc' * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vne), Uncx * ( cone.Δ2ncx_log .* (Uncx' * Hncx * Uncx) ) * Uncx', cone.rt2)
         D2PhiH -= cone.tr  * tr(Hx) / cone.trX
 
+        # Hessian product of barrier
         prodt = zi * zi * (Ht - dot(Hx_vec, cone.DPhi))
         prodX = -prodt * cone.DPhi + zi * D2PhiH
 
