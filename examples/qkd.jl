@@ -20,9 +20,9 @@ function qkd_problem(
     protocol::Union{String, Nothing} = nothing
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build quantum rate distortion problem
-    #   min  S( G(X) || Z(G(X)) )
+    #   min  t
     #   s.t. A(X) = b
-    #        X ⪰ 0
+    #        (t, X) ∈ K_qkd ≔ { (t, X) : t > S( G(X) || Z(G(X)) ), X⪰0 }
 
     ni  = size(K_list[1], 2)    # Input dimension
     nc  = size(γ, 1)
@@ -46,13 +46,14 @@ end
 
 function qkd_naive_problem(
     K_list::Vector{Matrix{R}},
-    Z_list::Vector{Matrix{R}},
+    Z_list::Vector{Matrix{T}},
     Γ::Vector{Matrix{R}},
     γ::Vector{T}
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build quantum rate distortion problem
-    #   min  S( G(X) || Z(G(X)) )
+    #   min  t
     #   s.t. A(X) = b
+    #        (t, G(X), Z(G(X))) ∈ K_qre
     #        X ⪰ 0
 
     ni  = size(K_list[1], 2)    # Input dimension
@@ -87,13 +88,18 @@ function qkd_naive_problem(
 end
 
 
-function main()
-    # Define rate distortion problem with entanglement fidelity distortion
-    # f = MAT.matopen("data/DMCV_08_60_05_35.mat")
-    f = MAT.matopen("data/dprBB84_02_14_30.mat")
+function main_dpr()
+    # Solve for quantum key rate
+    #   min  S( G(X) || Z(G(X)) )
+    #   s.t. A(X) = b
+    #        X ⪰ 0
+
+    # Get problem data for dprBB84 quantum key rate protocol
+    f_name = "dprBB84_02_14_30"
+    f = MAT.matopen("data/" * f_name * ".mat")
     data = MAT.read(f, "Data")
 
-    if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma_fr"][:]) == 0)
+    if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma"][:]) == 0)
         R = T
     else
         R = Complex{T}
@@ -106,40 +112,62 @@ function main()
 
     # Use specialized dprBB4 oracle
     model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    println("Now using specialized dprBB84 cone oracle")
-    print_statistics(solver)
+    print_statistics(solver, f_name, "DPR")
 
     # Use specialized QKD oracle with block diagonalization
-    model = qkd_problem(K_list, Z_list, Γ, γ)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+    model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84_naive")
+    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    println("Now using specialized QKD cone oracle")
-    print_statistics(solver)
-
-    # Use generic QKD oracle without block diagonalization
-    model = qkd_problem(K_list, Z_list, Γ, γ, "naive")
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    println("Now using generic QKD cone oracle")
-    print_statistics(solver)   
+    print_statistics(solver, f_name, "QKD")
 
     # Use generic QRD oracle
+    model = qkd_naive_problem(K_list, Z_list, Γ, γ)
+    solver = Solvers.Solver{T}()
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    print_statistics(solver, f_name, "QRE")
+end
+
+function main_dmcv()
+    # Solve for quantum key rate
+    #   min  S( G(X) || Z(G(X)) )
+    #   s.t. A(X) = b
+    #        X ⪰ 0
+
+    # Get problem data for DMCV quantum key rate protocol
+    f_name = "DMCV_08_60_05_35"
+    f = MAT.matopen("data/" * f_name * ".mat")
+    data = MAT.read(f, "Data")
+
+    if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma"][:]) == 0)
+        R = T
+    else
+        R = Complex{T}
+    end
+    
     K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
-    Z_list = convert(Vector{Matrix{R}}, data["Zlist"][:])
+    Z_list = convert(Vector{Matrix{T}}, data["Zlist"][:])
     Γ = convert(Vector{Matrix{R}}, data["Gamma"][:])
     γ = convert(Vector{T}, data["gamma"][:])
 
-    model = qkd_naive_problem(K_list, Z_list, Γ, γ)
-    solver = Solvers.Solver{T}(verbose = true)
+    # Use specialized QKD oracle with block diagonalization
+    model = qkd_problem(K_list, Z_list, Γ, γ)
+    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    println("Now using generic QRE cone oracle")
-    print_statistics(solver)
+    print_statistics(solver, f_name, "QKD")
+
+    # Use generic QRD oracle
+    model = qkd_naive_problem(K_list, Z_list, Γ, γ)
+    solver = Solvers.Solver{T}()
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    print_statistics(solver, f_name, "QRE")
 end
 
-main()
+main_dpr()
+main_dmcv()

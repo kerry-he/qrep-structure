@@ -14,12 +14,12 @@ Random.seed!(1)
 
 T = Float64
 
-function qrd_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64) where {T <: Real}
+function qrd_problem(n::Int, m::Int, W::Matrix{T}, Δ::Matrix{T}, D::Float64) where {T <: Real}
     # Build quantum rate distortion problem
-    #   min  S(B|BR)_X + S(Z)
-    #   s.t. Tr_B[X] = Z
-    #        <Δ,X> ≤ D
-    #        X ⪰ 0
+    #   min  t
+    #   s.t. Tr_2[X] = W
+    #        (t, X) ∈ K_qce
+    #        ⟨Δ, X⟩ ≤ D
 
     N = n * m
     sn = Cones.svec_length(n)
@@ -29,12 +29,12 @@ function qrd_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64) wh
     Δ_vec = Cones.smat_to_svec!(zeros(T, sN), Δ, sqrt(2.))
     
     # Build problem model
-    A1 = hcat(zeros(T, sn, 1), trB    , zeros(T, sn, 1))        # Tr_B[X] = Z
-    A2 = hcat(zero(T)        , Δ_vec' , one(T))                 # D = <Δ,X>
+    A1 = hcat(zeros(T, sn, 1), trB    , zeros(T, sn, 1))        # Tr_B[X] = W
+    A2 = hcat(zero(T)        , Δ_vec' , one(T))                 # D = ⟨Δ, X⟩
     A  = vcat(A1, A2)
 
     b = zeros(T, sn + 1)
-    @views Cones.smat_to_svec!(b[1:sn], Z, sqrt(2.))
+    @views Cones.smat_to_svec!(b[1:sn], W, sqrt(2.))
     b[end] = D
 
     c = vcat(one(T), zeros(T, sN + 1))
@@ -44,15 +44,15 @@ function qrd_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64) wh
 
     cones = [QuantCondEntropy{T}(n, m, 2), Cones.Nonnegative{T}(1)]
 
-    return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(Z))
+    return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(W))
 end
 
-function qrd_naive_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float64) where {T <: Real}
+function qrd_naive_problem(n::Int, m::Int, W::Matrix{T}, Δ::Matrix{T}, D::Float64) where {T <: Real}
     # Build quantum rate distortion problem
-    #   min  S(B|BR)_X + S(Z)
-    #   s.t. Tr_B[X] = Z
-    #        <Δ,X> ≤ D
-    #        X ⪰ 0
+    #   min  t
+    #   s.t. Tr_2[X] = W
+    #        (t, X, I⊗Tr_1[X]) ∈ K_qre
+    #        ⟨Δ, X⟩ ≤ D
 
     N = n * m
     sn = Cones.svec_length(n)
@@ -63,8 +63,8 @@ function qrd_naive_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float
     Δ_vec   = Cones.smat_to_svec!(zeros(T, sN), Δ, sqrt(2.))
     
     # Build problem model
-    A = hcat(zeros(T, sn, 1), trB)        # Tr_B[X] = Z
-    b = Cones.smat_to_svec!(zeros(T, sn), Z, sqrt(2.))
+    A = hcat(zeros(T, sn, 1), trB)        # Tr_B[X] = W
+    b = Cones.smat_to_svec!(zeros(T, sn), W, sqrt(2.))
     
     G1 = hcat(one(T)         , zeros(T, 1, sN))
     G2 = hcat(zeros(T, sN, 1), ikr_trR)
@@ -79,29 +79,37 @@ function qrd_naive_problem(n::Int, m::Int, Z::Matrix{T}, Δ::Matrix{T}, D::Float
 
     cones = [Cones.EpiTrRelEntropyTri{T, T}(1 + 2*sN), Cones.Nonnegative{T}(1)]
 
-    return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(Z))
+    return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(W))
 end
 
 
 function main()
+    # Solve the quantum rate distortion problem
+    #   min  S(B|BR)_X + S(W)
+    #   s.t. Tr_B[X] = W
+    #        ⟨Δ, X⟩ ≤ D
+    #        X ⪰ 0
+
     # Define rate distortion problem with entanglement fidelity distortion
     n = 4
-    Z = randDensityMatrix(T, n)
-    Δ = I - purify(Z)
+    W = randDensityMatrix(T, n)
+    Δ = I - purify(W)
     D = 0.5
     
-    model = qrd_problem(n, n, Z, Δ, D)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+    # Use quantum conditional entropy cone
+    model = qrd_problem(n, n, W, Δ, D)
+    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Quantum rate distortion", "QCE")
 
-
-    # model = qrd_naive_problem(n, n, Z, Δ, D)
-    # solver = Solvers.Solver{T}(verbose = true)
-    # Solvers.load(solver, model)
-    # Solvers.solve(solver)
-    # print_statistics(solver)
+    # Use quantum relative entropy cone
+    model = qrd_naive_problem(n, n, W, Δ, D)
+    solver = Solvers.Solver{T}()
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+    println("Solved using QRE cone")
+    print_statistics(solver, "Quantum rate distortion", "QRE")
 end
 
 main()

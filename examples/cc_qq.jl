@@ -17,9 +17,9 @@ T = Float64
 
 function qqcc_problem(ni::Int, no::Int, ne::Int, N::Function, Nc::Function)
     # Build quantum-quantum channel capacity problem
-    #   max  -S( WN(X)W || I x Tr_2[WN(X)W'] )
+    #   min  t
     #   s.t. tr[X] = 1
-    #        X ⪰ 0
+    #        (t, X) ∈ K_qci
 
     vni = Cones.svec_length(ni)
 
@@ -41,8 +41,9 @@ end
 
 function qqcc_qce_problem(ni::Int, no::Int, ne::Int, N::Function, W::Matrix{T}) where {T <: Real}
     # Build quantum-quantum channel capacity problem
-    #   max  -S( WN(X)W || I x Tr_2[WN(X)W'] )
+    #   min  t
     #   s.t. tr[X] = 1
+    #        (t, WN(X)W') ∈ K_qce
     #        X ⪰ 0
 
     vni  = Cones.svec_length(ni)
@@ -71,8 +72,9 @@ end
 
 function qqcc_qre_problem(ni::Int, no::Int, ne::Int, N::Function, W::Matrix{T}) where {T <: Real}
     # Build quantum-quantum channel capacity problem
-    #   max  -S( WN(X)W || I x Tr_2[WN(X)W'] )
+    #   min  t
     #   s.t. tr[X] = 1
+    #        (t, WN(X)W', I⊗Tr_1[WN(X)W']) ∈ K_qre
     #        X ⪰ 0
 
     nei  = ne*ni
@@ -104,29 +106,37 @@ end
 
 
 function main()
+    # Solve for quantum-quantum channel capacity
+    #   max  -S( WN(X)W' || I x Tr_2[WN(X)W'] )
+    #   s.t. tr[X] = 1
+    #        X ⪰ 0
+
     # Define random instance of ea channel capacity problem
     (ni, no, ne) = (4, 4, 4)
     V, W = randDegradableChannel(T, ni, no, ne)
     N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
     Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
 
+    # Use quantum mutual information cone
     model = qqcc_problem(ni, no, ne, N, Nc)
     solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Quantum quantum channel capacity", "QCI")
 
+    # Use quantum conditional entropy cone
     model = qqcc_qce_problem(ni, no, ne, N, W)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Quantum quantum channel capacity", "QCE")
 
+    # Use quantum relative entropy cone
     model = qqcc_qre_problem(ni, no, ne, N, W)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)  
+    print_statistics(solver, "Quantum quantum channel capacity", "QRE")  
 end
 
 main()

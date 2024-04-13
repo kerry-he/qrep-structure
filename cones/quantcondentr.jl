@@ -188,7 +188,7 @@ function Hypatia.Cones.update_feas(cone::QuantCondEntropy{T}) where {T <: Real}
             )
                 (λ, vecs) = fact
                 @. λ_log = log(λ)
-                spectral_outer!(X_log, vecs, λ_log, mat)
+                X_log .= vecs * (λ_log .* vecs')
             end
             cone.XY_log .= cone.X_log .- idKron(cone.Y_log, sys, (n1, n2))
             cone.z = point[1] - dot(XH, Hermitian(cone.XY_log, :U))
@@ -204,16 +204,15 @@ function Hypatia.Cones.update_grad(cone::QuantCondEntropy)
     @assert cone.is_feas
     rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
-    Xi = cone.Xi
 
-    spectral_outer!(Xi, Ux, inv.(Λx), zeros(T, size(Xi)))
+    cone.Xi .= Ux * (inv.(Λx) .* Ux')
 
     zi = inv(cone.z)
     @. cone.DPhi = cone.XY_log
 
     g = cone.grad
     g[1] = -zi;
-    @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], cone.DPhi * zi - Xi, rt2)
+    @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], cone.DPhi * zi - cone.Xi, rt2)
 
     cone.grad_updated = true
     return cone.grad

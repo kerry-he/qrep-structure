@@ -57,53 +57,12 @@ function Δ3_log!(Δ3::Array{T, 3}, Δ2::Matrix{T}, λ::Vector{T}) where {T <: R
     return Δ3
 end
 
-function Δ2_frechet!(
-    Δ2_F::Matrix{T}, 
-    S_Δ3::Array{T, 3}, 
-    U::Matrix{T}, 
-    UHU::Matrix{T}, 
-    mat::Matrix{T}, 
-    mat2::Matrix{T}
-) where {T <: Real}
-    n = size(U, 1);
-
-    @inbounds for k = 1:n
-        @views mat[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
-    end
-    mat .*= 2;
-    spectral_outer!(Δ2_F, U, mat, mat2)
-
-    return Δ2_F
-end
-
-function spectral_outer!(
-    mat::AbstractMatrix{T},
-    vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
-    symm::Matrix{T},
-    temp::Matrix{T},
-) where {T <: Real}
-    mul!(temp, vecs, symm)
-    mul!(mat, temp, vecs')
-    return mat
-end
-
-function spectral_outer!(
-    mat::AbstractMatrix{T},
-    vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
-    diag::AbstractVector{T},
-    temp::Matrix{T},
-) where {T <: Real}
-    mul!(temp, vecs, Diagonal(diag))
-    mul!(mat, temp, vecs')
-    return mat
-end
-
 function Δ2_frechet(
-    S_Δ3::Array{T, 3}, 
-    U::Matrix{T}, 
-    UHU::Matrix{T}, 
-) where {T <: Real}
-    out = zeros(T, size(U))
+    S_Δ3::Array{R, 3}, 
+    U::Matrix{R}, 
+    UHU::Matrix{R}, 
+) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
+    out = zeros(R, size(U))
 
     @inbounds for k in axes(S_Δ3, 3)
         @views out[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
@@ -112,7 +71,6 @@ function Δ2_frechet(
 
     return U * out * U'
 end
-
 
 function frechet_matrix!(
     out::AbstractMatrix{T}, 
@@ -184,7 +142,6 @@ function nonsymm_kron!(
 ) where {T <: Real, R <: Hypatia.RealOrComplex{T}}
     # Build matrix corresponding to linear map H -> X H X'
     n   = size(X, 1)
-
     temp = zeros(R, n, n)
 
     k = 1

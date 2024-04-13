@@ -156,14 +156,16 @@ function facial_reduction(
     end
 end
 
-function print_statistics(solver)
+function print_statistics(solver, problem, method)
     worst_gap = min(solver.gap / solver.point.tau[], abs(solver.primal_obj_t - solver.dual_obj_t))
     max_tau_obj = max(solver.point.tau[], min(abs(solver.primal_obj_t), abs(solver.dual_obj_t)))
+    println("Problem: \t", problem)
+    println("Method: \t", method)
     println("solve_time: \t", Solvers.get_solve_time(solver) - solver.time_rescale - solver.time_initx - solver.time_inity)
     println("no_iter: \t", Solvers.get_num_iters(solver))
     println("abs_gap: \t", solver.gap)
     println("rel_gap: \t", worst_gap / max_tau_obj)
     println("worst_feas: \t", max(solver.x_feas, solver.y_feas, solver.z_feas))
 
-    print()
+    println()
 end

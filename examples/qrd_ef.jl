@@ -17,10 +17,10 @@ T = Float64
 
 function qrd_ef_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
     # Build quantum rate distortion problem
-    #   min  S(B|BR)_X + S(Z)
-    #   s.t. Tr_B[X] = Z
-    #        <Δ,X> ≤ D
-    #        X ⪰ 0
+    #   min  t
+    #   s.t. Tr_2[G(y, Z)] = W
+    #        (t, y, Z) ∈ K_qce
+    #        ⟨Δ, G(y, Z)⟩ ≤ D
 
     m = n * (n - 1)
     vn = Cones.svec_length(n)
@@ -47,7 +47,7 @@ function qrd_ef_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
 
 
     # Build problem model
-    A1 = hcat(zeros(T, n, 1), pTr_y        , pTr_X  , zeros(T, n, 1))        # Tr_B[X] = Z
+    A1 = hcat(zeros(T, n, 1), pTr_y        , pTr_X  , zeros(T, n, 1))        # Tr_B[X] = W
     A2 = hcat(zero(T)       , ones(T, 1, m), Δ_vec' , one(T))                # D = <Δ,X>
     A  = vcat(A1, A2)
 
@@ -67,10 +67,11 @@ end
 
 function qrd_ef_qre_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
     # Build quantum rate distortion problem
-    #   min  S(B|BR)_X + S(Z)
-    #   s.t. Tr_B[X] = Z
-    #        <Δ,X> ≤ D
-    #        X ⪰ 0
+    #   min  t1 + t2
+    #   s.t. Tr_2[G(y, Z)] = W
+    #        (t1, y, G1(y, Z)) ∈ K_cre
+    #        (t2, Z, G2(y, Z)) ∈ K_qre
+    #        ⟨Δ, G(y, Z)⟩ ≤ D
 
     m = n * (n - 1)
     N = n * n
@@ -155,7 +156,7 @@ function qrd_ef_qre_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
 
 
     # Build problem model
-    A = hcat(zeros(T, n, 2), pTr_y, pTr_X)        # Tr_B[X] = Z
+    A = hcat(zeros(T, n, 2), pTr_y, pTr_X)        # Tr_B[X] = W
     b = λ
 
     c = vcat(ones(T, 2), zeros(T, m + vn))
@@ -180,10 +181,10 @@ end
 
 function qrd_ef_qce_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
     # Build quantum rate distortion problem
-    #   min  S(B|BR)_X + S(Z)
-    #   s.t. Tr_B[X] = Z
-    #        <Δ,X> ≤ D
-    #        X ⪰ 0
+    #   min  t
+    #   s.t. Tr_2[G(y, Z)] = W
+    #        (t, G(y, Z)) ∈ K_qce
+    #        ⟨Δ, G(y, Z)⟩ ≤ D
 
     m = n * (n - 1)
     N = n * n
@@ -234,7 +235,7 @@ function qrd_ef_qce_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
     end
 
     # Build problem model
-    A = hcat(zeros(T, n, 1), pTr_y, pTr_X)        # Tr_B[X] = Z
+    A = hcat(zeros(T, n, 1), pTr_y, pTr_X)        # Tr_B[X] = W
     b = λ
 
     c = vcat(one(T), zeros(T, m + vn))
@@ -254,28 +255,37 @@ end
 
 
 function main()
+    # Solve quantum rate distortion problem with entaglement fidelity distortion
+    #   min  S(B|BR)_G(y, Z) + S(W)
+    #   s.t. Tr_B[G(y, Z)] = W
+    #        ⟨Δ, G(y, Z)⟩ ≤ D
+    #        y ≥ 0, Z ⪰ 0
+
     # Define rate distortion problem with entanglement fidelity distortion
     n = 4
     λ = eigvals(randDensityMatrix(T, n))
     D = 0.5
     
+    # Use restriction of quantum conditional entropy cone to fixed point subspace
     model = qrd_ef_problem(n, λ, D)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Quantum rate distortion w/ entanglement fidelity distortion", "QRD")
 
+    # Use decomposition of relative entropy cones
     model = qrd_ef_qre_problem(n, λ, D)
-    solver = Solvers.Solver{T}(verbose = true)
+    solver = Solvers.Solver{T}()
     Solvers.load(solver, model)
-    Solvers.solve(solver)    
-    print_statistics(solver)
+    Solvers.solve(solver)
+    print_statistics(solver, "Quantum rate distortion w/ entanglement fidelity distortion", "QRE*")
 
+    # Use quantum conditional entropy cone with linear constraints
     model = qrd_ef_qce_problem(n, λ, D)
-    solver = Solvers.Solver{T}(verbose = true)
+    solver = Solvers.Solver{T}()
     Solvers.load(solver, model)
-    Solvers.solve(solver)    
-    print_statistics(solver)
+    Solvers.solve(solver)
+    print_statistics(solver, "Quantum rate distortion w/ entanglement fidelity distortion", "QCE*")
 end
 
 main()

@@ -164,7 +164,7 @@ function Hypatia.Cones.update_feas(cone::QuantRateDistortion{T}) where {T <: Rea
         if isposdef(X_fact) && all(cone.y .> 0) && all(cone.w .> 0)
             (λ, U) = X_fact
             @. cone.Λx_log = log(λ)
-            spectral_outer!(cone.X_log, U, cone.Λx_log, zeros(T, size(cone.X_log)))
+            cone.X_log .= U * (cone.Λx_log .* U')
 
             cone.y_log = log.(cone.y)
             cone.w_log = log.(cone.w)
@@ -188,7 +188,7 @@ function Hypatia.Cones.update_grad(cone::QuantRateDistortion)
     rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
 
-    spectral_outer!(cone.Xi, Ux, inv.(Λx), zeros(T, size(cone.Xi)))
+    cone.Xi = Ux * (inv.(Λx) .* Ux')
     cone.yi = inv.(cone.y)
 
     zi = 1 / cone.z

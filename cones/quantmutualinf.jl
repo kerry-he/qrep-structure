@@ -201,7 +201,7 @@ function Hypatia.Cones.update_feas(cone::QuantMutualInformation{T}) where {T <: 
             )
                 (λ, U) = fact
                 @. λ_log = log(λ)
-                spectral_outer!(X_log, U, λ_log, zeros(T, size(X_log)))
+                X_log .= U * (λ_log .* U')
             end
 
             cone.trX_log = log(cone.trX)
@@ -225,9 +225,8 @@ function Hypatia.Cones.update_grad(cone::QuantMutualInformation)
     @assert cone.is_feas
     rt2 = cone.rt2
     (Λx, Ux) = cone.X_fact
-    Xi = cone.Xi
 
-    spectral_outer!(Xi, Ux, inv.(Λx), zeros(T, size(Xi)))
+    cone.Xi = Ux * (inv.(Λx) .* Ux')
 
     log_X      = Hypatia.Cones.smat_to_svec!(zeros(T, cone.vni), cone.X_log, rt2)
     N_log_NX   = cone.N'  * Hypatia.Cones.smat_to_svec!(zeros(T, cone.vno), cone.NX_log, rt2)
@@ -239,7 +238,7 @@ function Hypatia.Cones.update_grad(cone::QuantMutualInformation)
 
     g = cone.grad
     g[1] = -zi
-    @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], -Xi, rt2)
+    @views Hypatia.Cones.smat_to_svec!(g[cone.X_idxs], -cone.Xi, rt2)
     g[cone.X_idxs] += zi * cone.DPhi
 
     cone.grad_updated = true
