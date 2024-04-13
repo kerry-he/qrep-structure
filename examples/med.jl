@@ -18,11 +18,11 @@ function heisenberg(delta::Float64, L::Int)
 end
 
 function med_problem(L::Int)
-    # Build MED problem
-    #   min  <H,X>
-    #   s.t. X ⪰ 0, tr(X) = 1
-    #        Tr_1[X] == Tr_L[X]
-    #        S(L|1...L-1)_X ≥ 0
+    # Build ground state energy of Hamiltonian problem
+    #   min  ⟨H,X⟩
+    #   s.t. Tr_1[X] = Tr_L[X]
+    #        tr[X] = 1
+    #        (t, X) ∈ K_qce
 
     N = 2^L
     sN = Cones.svec_length(N)
@@ -56,11 +56,11 @@ function med_problem(L::Int)
 end
 
 function med_naive_problem(L::Int)
-    # Build MED problem
-    #   min  <H,X>
-    #   s.t. X ⪰ 0, tr(X) = 1
-    #        Tr_1[X] == Tr_L[X]
-    #        S(L|1...L-1)_X ≥ 0
+    # Build ground state energy of Hamiltonian problem
+    #   min  ⟨H,X⟩
+    #   s.t. Tr_1[X] = Tr_L[X]
+    #        tr[X] = 1
+    #        (t, X, I⊗Tr_1[X]) ∈ K_qre
 
     N = 2^L
     sN = Cones.svec_length(N)
@@ -92,19 +92,28 @@ function med_naive_problem(L::Int)
 end
 
 function main()
+    # Estimate ground state energy of Hamiltonians 
+    #   min  ⟨H,X⟩
+    #   s.t. Tr_1[X] = Tr_L[X]
+    #        tr[X] = 1
+    #        S(L|1...L-1)_X ≥ 0
+    #        X ⪰ 0
+
     L = 2
 
+    # Use quantum conditional entropy cone
     model = med_problem(L)
     solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Ground state energy of Hamiltonian", "QCE") 
 
+    # Use quantum relative entropy cone
     model = med_naive_problem(L)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Ground state energy of Hamiltonian", "QRE")
 end
 
 main()

@@ -8,6 +8,7 @@ include("../cones/quantcondentr.jl")
 include("../cones/quantmutualinf.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/helper.jl")
+include("../utils/quantum.jl")
 
 import Random
 Random.seed!(1)
@@ -16,9 +17,9 @@ T = Float64
 
 function eacc_problem(ni::Int, no::Int, ne::Int, V::Matrix{T}) where {T <: Real}
     # Build entanglement assisted channel capacity problem
-    #   max  -S(B|BE)_VXV' + S(B)_VXV'
+    #   min  t
     #   s.t. tr[X] = 1
-    #        X ⪰ 0
+    #        (t, X) ∈ K_qmi
 
     vni = Cones.svec_length(ni)
 
@@ -40,9 +41,10 @@ end
 
 function eacc_qce_problem(ni::Int, no::Int, ne::Int, V::Matrix{T}) where {T <: Real}
     # Build entanglement assisted channel capacity problem
-    #   max  -S(B|BE)_VXV' + S(B)_VXV'
+    #   min  t1 + t2
     #   s.t. tr[X] = 1
-    #        X ⪰ 0
+    #        (t1, VXV') ∈ K_qce
+    #        (t2, Tr_2[VXV'], tr[X]) ∈ K_qe
 
     vni  = Cones.svec_length(ni)
     vno  = Cones.svec_length(no)
@@ -81,9 +83,10 @@ end
 
 function eacc_qre_problem(ni::Int, no::Int, ne::Int, V::Matrix{T}) where {T <: Real}
     # Build entanglement assisted channel capacity problem
-    #   max  -S(B|BE)_VXV' + S(B)_VXV'
+    #   min  t1 + t2
     #   s.t. tr[X] = 1
-    #        X ⪰ 0
+    #        (t1, VXV', I⊗Tr_1[VXV']) ∈ K_qre
+    #        (t2, Tr_2[VXV'], tr[X]) ∈ K_qe
 
     noe = no*ne
     vni  = Cones.svec_length(ni)
@@ -125,27 +128,35 @@ end
 
 
 function main()
+    # Solve entanglement assisted channel capacity
+    #   max  -S(B|BE)_VXV' + S(B)_VXV'
+    #   s.t. tr[X] = 1
+    #        X ⪰ 0
+
     # Define random instance of ea channel capacity problem
     (ni, no, ne) = (4, 4, 4)
     V = randStinespringOperator(T, ni, no, ne)
 
+    # Use quantum mutual information cone
     model = eacc_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Entanglement assisted channel capacity", "QMI")
 
+    # Use quantum conditional entropy cone
     model = eacc_qce_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Entanglement assisted channel capacity", "QCE")
 
+    # Use quantum relative entropy cone
     model = eacc_qre_problem(ni, no, ne, V)
     solver = Solvers.Solver{T}(verbose = true)
     Solvers.load(solver, model)
     Solvers.solve(solver)
-    print_statistics(solver)
+    print_statistics(solver, "Entanglement assisted channel capacity", "QRE")
 end
 
 main()
