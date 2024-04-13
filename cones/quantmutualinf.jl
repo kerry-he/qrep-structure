@@ -2,6 +2,7 @@ using LinearAlgebra
 import Hypatia.Cones
 
 include("../utils/helper.jl")
+include("../utils/spectral.jl")
 
 mutable struct QuantMutualInformation{T <: Real} <: Hypatia.Cones.Cone{T}
     use_dual_barrier::Bool
@@ -321,9 +322,9 @@ function update_invhessprod_aux(cone::QuantMutualInformation)
 
     rt2 = cone.rt2
 
-    (Λx, Ux) = cone.X_fact
-    (Λnx, Unx) = cone.NX_fact
-    (Λncx, Uncx) = cone.NcX_fact    
+    Ux   = cone.X_fact.vectors
+    Unx  = cone.NX_fact.vectors
+    Uncx = cone.NcX_fact.vectors
 
     # Hessian for -S(X) component
     k = 1
@@ -345,7 +346,7 @@ function update_invhessprod_aux(cone::QuantMutualInformation)
         UHU = sqrt.(cone.Δ2nx_log) .* (Unx' * H * Unx)
         @views Hypatia.Cones.smat_to_svec!(UUN[k, :], UHU, cone.rt2)
     end
-    cone.hess += UUN * UUN'
+    syrk_wrapper!(cone.hess, UUN, true)
 
     # Hessian for +S(Nc(X)) component
     UUNc = zeros(T, cone.vni, cone.vne)
@@ -355,7 +356,7 @@ function update_invhessprod_aux(cone::QuantMutualInformation)
         UHU = sqrt.(cone.Δ2ncx_log) .* (Uncx' * H * Uncx)
         @views Hypatia.Cones.smat_to_svec!(UUNc[k, :], UHU, cone.rt2)
     end
-    cone.hess -= UUNc * UUNc'
+    syrk_wrapper!(cone.hess, UUNc, -1.)
 
     # Hessian for +S(tr[X]) component
     cone.hess -= cone.tr * cone.tr' / cone.trX
@@ -461,102 +462,3 @@ function Hypatia.Cones.dder3(cone::QuantMutualInformation{T}, dir::AbstractVecto
 
     return dder3
 end
-
-#-----------------------------------------------------------------------------------------------------
-
-function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: Real}
-    rteps = sqrt(eps(T))
-    d = length(λ)
-
-    @inbounds for j in 1:d
-        λ_j = λ[j]
-        lλ_j = log_λ[j]
-        for i in 1:(j - 1)
-            λ_i = λ[i]
-            λ_ij = λ_i - λ_j
-            if abs(λ_ij) < rteps
-                Δ2[i, j] = 2 / (λ_i + λ_j)
-            else
-                Δ2[i, j] = (log_λ[i] - lλ_j) / λ_ij
-            end
-        end
-        Δ2[j, j] = inv(λ_j)
-    end
-
-    # make symmetric
-    LinearAlgebra.LinearAlgebra.LinearAlgebra.copytri!(Δ2, 'U')
-    return Δ2
-end
-
-function Δ3_log!(Δ3::Array{T, 3}, Δ2::Matrix{T}, λ::Vector{T}) where {T <: Real}
-    @assert issymmetric(Δ2) # must be symmetric (wrapper is less efficient)
-    rteps = sqrt(eps(T))
-    d = length(λ)
-
-    @inbounds for k in 1:d, j in 1:k, i in 1:j
-        λ_j = λ[j]
-        λ_k = λ[k]
-        λ_jk = λ_j - λ_k
-        if abs(λ_jk) < rteps
-            λ_i = λ[i]
-            λ_ij = λ_i - λ_j
-            if abs(λ_ij) < rteps
-                t = abs2(3 / (λ_i + λ_j + λ_k)) / -2
-            else
-                t = (Δ2[i, j] - Δ2[j, k]) / λ_ij
-            end
-        else
-            t = (Δ2[i, j] - Δ2[i, k]) / λ_jk
-        end
-
-        Δ3[i, j, k] =
-            Δ3[i, k, j] = Δ3[j, i, k] = Δ3[j, k, i] = Δ3[k, i, j] = Δ3[k, j, i] = t
-    end
-
-    return Δ3
-end
-
-function Δ2_frechet(
-    S_Δ3::Array{T, 3}, 
-    U::Matrix{T}, 
-    UHU::Matrix{T}, 
-) where {T <: Real}
-    out = zeros(T, size(U))
-
-    @inbounds for k in axes(S_Δ3, 3)
-        @views out[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
-    end
-    out .*= 2;
-
-    return U * out * U'
-end
-
-
-function spectral_outer!(
-    mat::AbstractMatrix{T},
-    vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
-    symm::Matrix{T},
-    temp::Matrix{T},
-) where {T <: Real}
-    mul!(temp, vecs, symm)
-    mul!(mat, temp, vecs')
-    return mat
-end
-
-function spectral_outer!(
-    mat::AbstractMatrix{T},
-    vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
-    diag::AbstractVector{T},
-    temp::Matrix{T},
-) where {T <: Real}
-    mul!(temp, vecs, Diagonal(diag))
-    mul!(mat, temp, vecs')
-    return mat
-end
-
-# function smat_to_svec(
-#     mat::AbstractMatrix{Complex{T}},
-#     rt2::Real,
-# ) where {T <: Real}
-#     return Hypatia.Cones.smat_to_svec!
-# end

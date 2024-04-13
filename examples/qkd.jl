@@ -10,9 +10,6 @@ include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/helper.jl")
 
-import Random
-Random.seed!(1)
-
 T = Float64
 
 function qkd_problem(

@@ -8,6 +8,7 @@ include("../cones/quantcondentr.jl")
 include("../cones/quantmutualinf.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/helper.jl")
+include("../utils/quantum.jl")
 
 import Random
 Random.seed!(1)

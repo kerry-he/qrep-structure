@@ -2,6 +2,7 @@ using LinearAlgebra
 import Hypatia.Cones
 
 include("../utils/helper.jl")
+include("../utils/spectral.jl")
 
 mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     use_dual_barrier::Bool
@@ -10,7 +11,6 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     n::Int
     n1::Int
     n2::Int
-    m::Int
     N::Int
     sys::Int
     X_dim::Int
@@ -30,14 +30,8 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
     inv_hess_updated::Bool
     hess_fact_updated::Bool
     is_feas::Bool
-    hess::Symmetric{T, Matrix{T}}
-    inv_hess::Symmetric{T, Matrix{T}}
-    hess_fact_mat::Symmetric{T, Matrix{T}}
-    hess_fact::Factorization{T}
 
     rt2::T
-    In::Matrix{T}
-    IN::Matrix{T}
     X::Matrix{T}
     Y::Matrix{T}
     X_fact::Eigen{T}
@@ -59,36 +53,19 @@ mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}
 
     UyXUy::Matrix{T}
     DPhi::Matrix{T}
-    H_inv_g_x::Matrix{T}
-    DPhi_H_DPhi::T
     UxK::Matrix{T}
-    UxK_temp::Matrix{T}
-    HYY::Matrix{T}
-    KHxK::Matrix{T}
-    HYY_KHxK::Matrix{T}
-    HYY_KHxK_chol::Cholesky{T, Matrix{T}}
     schur::Matrix{T}
+    schur_chol::Cholesky{T, Matrix{T}}
     schur_temp::Symmetric{T, Matrix{T}}
 
     Hx::Matrix{T}
     Hy::Matrix{T}
 
     matn::Matrix{T}
-    matn2::Matrix{T}
-    matn3::Matrix{T}
-    matn4::Matrix{T}
-    matm::Matrix{T}
     matN::Matrix{T}
-    matN2::Matrix{T}
-    matN3::Matrix{T}
-    matN4::Matrix{T}
-    vecm::Vector{T}
-    vecm2::Vector{T}
-    vecM::Vector{T}
-    vecn::Vector{T}
-    vecn2::Vector{T}
     vecN::Vector{T}
     vecN2::Vector{T}
+    temp::Matrix{T}
 
     hessprod_aux_updated::Bool
     invhessprod_aux_updated::Bool
@@ -138,8 +115,6 @@ function Hypatia.Cones.setup_extra_data!(
     Y_dim = cone.Y_dim
 
     cone.rt2 = sqrt(T(2))
-    cone.In = Matrix{T}(I, n, n)
-    cone.IN = Matrix{T}(I, N, N)
     cone.X_idxs = 2:dim
 
     cone.X = zeros(T, N, N)
@@ -160,13 +135,7 @@ function Hypatia.Cones.setup_extra_data!(
 
     cone.UyXUy = zeros(T, n, n)
     cone.DPhi = zeros(T, N, N)
-    cone.H_inv_g_x = zeros(T, N, N)
-    cone.DPhi_H_DPhi = 0
-    cone.UxK = zeros(T, X_dim, Y_dim)
-    cone.UxK_temp = zeros(T, X_dim, Y_dim)
-    cone.HYY = zeros(T, Y_dim, Y_dim)
-    cone.KHxK = zeros(T, Y_dim, Y_dim)
-    cone.HYY_KHxK = zeros(T, Y_dim, Y_dim)
+    cone.UxK = zeros(T, Y_dim, X_dim)
     cone.schur = zeros(T, Y_dim, Y_dim)    
     cone.schur_temp = Symmetric(zeros(T, Y_dim, Y_dim))
 
@@ -174,21 +143,10 @@ function Hypatia.Cones.setup_extra_data!(
     cone.Hy = zeros(T, n, n)
 
     cone.matn = zeros(T, n, n)
-    cone.matn2 = zeros(T, n, n)
-    cone.matn3 = zeros(T, n, n)
-    cone.matn4 = zeros(T, n, n)
-    cone.matm = zeros(T, Y_dim, Y_dim)
     cone.matN = zeros(T, N, N)
-    cone.matN2 = zeros(T, N, N)
-    cone.matN3 = zeros(T, N, N)
-    cone.matN4 = zeros(T, N, N)
-    cone.vecm = zeros(T, Y_dim)
-    cone.vecm2 = zeros(T, Y_dim)
-    cone.vecM = zeros(T, X_dim)
-    cone.vecn = zeros(T, n)
-    cone.vecn2 = zeros(T, n)
     cone.vecN = zeros(T, N)
     cone.vecN2 = zeros(T, N)
+    cone.temp = zeros(T, Y_dim, Y_dim)
 
     return cone
 end
@@ -323,9 +281,6 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
 
     rt2 = cone.rt2
     n = cone.n
-    Δ2x_log = cone.Δ2x_log
-    Δ2x_comb_inv = cone.Δ2x_comb_inv
-    Δ2y_log = cone.Δ2y_log
     (Λx, Ux) = cone.X_fact
     (Λy, Uy) = cone.Y_fact
     zi = inv(cone.z)
@@ -334,21 +289,19 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
 
     UxK = cone.UxK
 
-    matn = cone.matn
-    matn2 = cone.matn2
-    matn3 = cone.matn3
     matN = cone.matN
+    matn = zeros(T, n, n)
 
     Hx = cone.Hx
     Hy = cone.Hy
     rt2i = 1 / rt2
     
     @. matN = 1 / (Λx' * Λx)
-    @. Δ2x_comb_inv = 1 / (Δ2x_log*zi + matN)
-    rt2_Δ2x_comb_inv = sqrt.(Δ2x_comb_inv)
+    @. cone.Δ2x_comb_inv = 1 / (cone.Δ2x_log*zi + matN)
+    rt2_Δ2x_comb_inv = sqrt.(cone.Δ2x_comb_inv)
 
-    # Construct matrices
-    # Matrix of small entropy S(tr1[X])
+    # Construct Schur complement
+    # Matrix of S(tr1[X])
     k = 1
     @inbounds for j in 1:n, i in 1:j
         mul!(Hy, Uy[i, :], Uy[j, :]')
@@ -357,9 +310,8 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
             @. Hy = rt2i * matn
         end
 
-        @. matn = cone.z * Hy / Δ2y_log
-        spectral_outer!(matn3, Uy, matn, matn2)
-        @views Hypatia.Cones.smat_to_svec!(cone.schur[:, k], matn3, rt2)
+        matn = Uy * (cone.z .* Hy ./ cone.Δ2y_log) * Uy'
+        @views Hypatia.Cones.smat_to_svec!(cone.schur[:, k], matn, rt2)
 
         k += 1
     end
@@ -387,15 +339,15 @@ function update_invhessprod_aux(cone::QuantCondEntropy)
             @. Hx = rt2i * matN
         end
         Hx .*= rt2_Δ2x_comb_inv
-        @views Hypatia.Cones.smat_to_svec!(UxK[:, k], Hx, rt2)
+        @views Hypatia.Cones.smat_to_svec!(UxK[k, :], Hx, rt2)
 
         k += 1
     end
+    syrk_wrapper!(cone.schur, UxK, -1.)
 
-    LinearAlgebra.BLAS.syrk!('U', 'T', -1., UxK, true, cone.schur)
-
+    # Factor Schur complement
     sym_hess = Symmetric(cone.schur, :U)
-    cone.HYY_KHxK_chol = Hypatia.Cones.posdef_fact_copy!(cone.schur_temp, sym_hess)    
+    cone.schur_chol = Hypatia.Cones.posdef_fact_copy!(cone.schur_temp, sym_hess)    
 
     cone.invhessprod_aux_updated = true
     return
@@ -438,7 +390,7 @@ function Hypatia.Cones.inv_hess_prod!(
 
     end
 
-    Wy = cone.HYY_KHxK_chol \ Wy
+    Wy = cone.schur_chol \ Wy
         
     @inbounds for k in axes(arr, 2)
 
@@ -463,8 +415,8 @@ function update_dder3_aux(cone::QuantCondEntropy)
     @assert !cone.dder3_aux_updated
     @assert cone.hessprod_aux_updated
 
-    Δ3!(cone.Δ3x_log, cone.Δ2x_log, cone.X_fact.values)
-    Δ3!(cone.Δ3y_log, cone.Δ2y_log, cone.Y_fact.values)
+    Δ3_log!(cone.Δ3x_log, cone.Δ2x_log, cone.X_fact.values)
+    Δ3_log!(cone.Δ3y_log, cone.Δ2y_log, cone.Y_fact.values)
 
     cone.dder3_aux_updated = true
     return
@@ -489,7 +441,7 @@ function Hypatia.Cones.dder3(cone::QuantCondEntropy{T}, dir::AbstractVector{T}) 
     Ht = dir[1]
     @views Hypatia.Cones.svec_to_smat!(Hx, dir[cone.X_idxs], rt2)
     LinearAlgebra.copytri!(Hx, 'U')
-    pTr!(Hy, Hx, cone.sys, (cone.n1, cone.n2))
+    @views pTr!(Hy, Hx, cone.sys, (cone.n1, cone.n2))
 
     UHUx = Ux' * Hx * Ux
     UHUy = Uy' * Hy * Uy
@@ -517,143 +469,4 @@ function Hypatia.Cones.dder3(cone::QuantCondEntropy{T}, dir::AbstractVector{T}) 
     @. dder3 *= -0.5
 
     return dder3
-end
-
-#-----------------------------------------------------------------------------------------------------
-
-function Δ2_log!(Δ2::Matrix{T}, λ::Vector{T}, log_λ::Vector{T}) where {T <: Real}
-    rteps = sqrt(eps(T))
-    d = length(λ)
-
-    @inbounds for j in 1:d
-        λ_j = λ[j]
-        lλ_j = log_λ[j]
-        for i in 1:(j - 1)
-            λ_i = λ[i]
-            λ_ij = λ_i - λ_j
-            if abs(λ_ij) < rteps
-                Δ2[i, j] = 2 / (λ_i + λ_j)
-            else
-                Δ2[i, j] = (log_λ[i] - lλ_j) / λ_ij
-            end
-        end
-        Δ2[j, j] = inv(λ_j)
-    end
-
-    # make symmetric
-    LinearAlgebra.LinearAlgebra.LinearAlgebra.copytri!(Δ2, 'U')
-    return Δ2
-end
-
-function Δ3_log!(Δ3::Array{T, 3}, Δ2::Matrix{T}, λ::Vector{T}) where {T <: Real}
-    @assert issymmetric(Δ2) # must be symmetric (wrapper is less efficient)
-    rteps = sqrt(eps(T))
-    d = length(λ)
-
-    @inbounds for k in 1:d, j in 1:k, i in 1:j
-        λ_j = λ[j]
-        λ_k = λ[k]
-        λ_jk = λ_j - λ_k
-        if abs(λ_jk) < rteps
-            λ_i = λ[i]
-            λ_ij = λ_i - λ_j
-            if abs(λ_ij) < rteps
-                t = abs2(3 / (λ_i + λ_j + λ_k)) / -2
-            else
-                t = (Δ2[i, j] - Δ2[j, k]) / λ_ij
-            end
-        else
-            t = (Δ2[i, j] - Δ2[i, k]) / λ_jk
-        end
-
-        Δ3[i, j, k] =
-            Δ3[i, k, j] = Δ3[j, i, k] = Δ3[j, k, i] = Δ3[k, i, j] = Δ3[k, j, i] = t
-    end
-
-    return Δ3
-end
-
-function Δ3!(Δ3::Array{T, 3}, Δ2::Matrix{T}, λ::Vector{T}) where {T <: Real}
-    @assert issymmetric(Δ2) # must be symmetric (wrapper is less efficient)
-    rteps = sqrt(eps(T))
-    d = length(λ)
-
-    @inbounds for k in 1:d, j in 1:k, i in 1:j
-        λ_j = λ[j]
-        λ_k = λ[k]
-        λ_jk = λ_j - λ_k
-        if abs(λ_jk) < rteps
-            λ_i = λ[i]
-            λ_ij = λ_i - λ_j
-            if abs(λ_ij) < rteps
-                t = abs2(3 / (λ_i + λ_j + λ_k)) / -2
-            else
-                t = (Δ2[i, j] - Δ2[j, k]) / λ_ij
-            end
-        else
-            t = (Δ2[i, j] - Δ2[i, k]) / λ_jk
-        end
-
-        Δ3[i, j, k] =
-            Δ3[i, k, j] = Δ3[j, i, k] = Δ3[j, k, i] = Δ3[k, i, j] = Δ3[k, j, i] = t
-    end
-
-    return Δ3
-end
-
-function Δ2_frechet!(
-    Δ2_F::Matrix{T}, 
-    S_Δ3::Array{T, 3}, 
-    U::Matrix{T}, 
-    UHU::Matrix{T}, 
-    mat::Matrix{T}, 
-    mat2::Matrix{T}
-) where {T <: Real}
-    n = size(U, 1);
-
-    @inbounds for k = 1:n
-        @views mat[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
-    end
-    mat .*= 2;
-    spectral_outer!(Δ2_F, U, mat, mat2)
-    # spectral_outer!(Δ2_F, U, Symmetric(mat, :U), mat2)
-
-    return Δ2_F
-end
-
-function spectral_outer!(
-    mat::AbstractMatrix{T},
-    vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
-    symm::Matrix{T},
-    temp::Matrix{T},
-) where {T <: Real}
-    mul!(temp, vecs, symm)
-    mul!(mat, temp, vecs')
-    return mat
-end
-
-function spectral_outer!(
-    mat::AbstractMatrix{T},
-    vecs::Union{Matrix{T}, Adjoint{T, Matrix{T}}},
-    diag::AbstractVector{T},
-    temp::Matrix{T},
-) where {T <: Real}
-    mul!(temp, vecs, Diagonal(diag))
-    mul!(mat, temp, vecs')
-    return mat
-end
-
-function Δ2_frechet(
-    S_Δ3::Array{T, 3}, 
-    U::Matrix{T}, 
-    UHU::Matrix{T}, 
-) where {T <: Real}
-    out = zeros(T, size(U))
-
-    @inbounds for k in axes(S_Δ3, 3)
-        @views out[:, k] .= S_Δ3[:, :, k] * UHU[k, :];
-    end
-    out .*= 2;
-
-    return U * out * U'
 end

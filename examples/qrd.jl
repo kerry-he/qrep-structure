@@ -7,6 +7,7 @@ import Hypatia.Solvers
 include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/helper.jl")
+include("../utils/quantum.jl")
 
 import Random
 Random.seed!(1)
@@ -85,9 +86,8 @@ end
 function main()
     # Define rate distortion problem with entanglement fidelity distortion
     n = 4
-    λ = eigvals(randDensityMatrix(T, n))
-    Z = diagm(λ)    
-    Δ = I - purify(λ)
+    Z = randDensityMatrix(T, n)
+    Δ = I - purify(Z)
     D = 0.5
     
     model = qrd_problem(n, n, Z, Δ, D)
