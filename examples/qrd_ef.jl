@@ -7,7 +7,7 @@ import Hypatia.Solvers
 include("../cones/quantratedist.jl")
 include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
-include("../utils/helper.jl")
+include("../utils/linear.jl")
 include("../utils/quantum.jl")
 
 import Random

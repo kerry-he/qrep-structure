@@ -1,4 +1,5 @@
 using LinearAlgebra
+import Random
 
 import Hypatia
 import Hypatia.Cones
@@ -7,11 +8,9 @@ import Hypatia.Solvers
 include("../cones/quantcondentr.jl")
 include("../cones/quantmutualinf.jl")
 include("../systemsolvers/elim.jl")
-include("../utils/helper.jl")
+include("../utils/linear.jl")
 include("../utils/quantum.jl")
-
-import Random
-Random.seed!(1)
+include("../utils/helper.jl")
 
 T = Float64
 
@@ -126,37 +125,75 @@ function eacc_qre_problem(ni::Int, no::Int, ne::Int, V::Matrix{T}) where {T <: R
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 end
 
+function precompile()
+    V = randStinespringOperator(T, 2, 2, 2)
 
-function main()
+    # Use quantum mutual information cone
+    model = eacc_problem(2, 2, 2, V)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+
+    # Use quantum conditional entropy cone
+    model = eacc_qce_problem(2, 2, 2, V)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+
+    # Use quantum relative entropy cone
+    model = eacc_qre_problem(2, 2, 2, V)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+end
+
+function main(csv_name::String, all_tests::Bool)
     # Solve entanglement assisted channel capacity
     #   max  -S(B|BE)_VXV' + S(B)_VXV'
     #   s.t. tr[X] = 1
     #        X ⪰ 0
+    
+    test_set = [
+        (2, 2, 2);
+        (4, 4, 4);
+        # (8, 8, 8)
+    ]
+    if all_tests
+        test_set = [
+            test_set;
+            (16, 16, 16);
+            (32, 32, 32);
+            (64, 64, 64)
+        ]
+    end
 
-    # Define random instance of ea channel capacity problem
-    (ni, no, ne) = (4, 4, 4)
-    V = randStinespringOperator(T, ni, no, ne)
+    problem = "cc_ea"
+    
+    # Precompile with small problem
+    precompile()
+    
+    # Loop through all the problems
+    for test in test_set
+        (ni, no, ne) = test
+        description = string(ni) * "_" * string(no) * "_" * string(ne)
 
-    # Use quantum mutual information cone
-    model = eacc_problem(ni, no, ne, V)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Entanglement assisted channel capacity", "QMI")
+        Random.seed!(1)
+        V = randStinespringOperator(T, ni, no, ne)
 
-    # Use quantum conditional entropy cone
-    model = eacc_qce_problem(ni, no, ne, V)
-    solver = Solvers.Solver{T}(verbose = true)
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Entanglement assisted channel capacity", "QCE")
+        # Use quantum mutual information cone
+        model = eacc_problem(ni, no, ne, V)
+        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+        try_solve(model, solver, problem, description, "QMI", csv_name)
 
-    # Use quantum relative entropy cone
-    model = eacc_qre_problem(ni, no, ne, V)
-    solver = Solvers.Solver{T}(verbose = true)
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Entanglement assisted channel capacity", "QRE")
+        # Use quantum conditional entropy cone
+        model = eacc_qce_problem(ni, no, ne, V)
+        solver = Solvers.Solver{T}(verbose = true)
+        try_solve(model, solver, problem, description, "QCE", csv_name)
+
+        # Use quantum relative entropy cone
+        model = eacc_qre_problem(ni, no, ne, V)
+        solver = Solvers.Solver{T}(verbose = true)
+        try_solve(model, solver, problem, description, "QRE", csv_name)
+    end
+
 end
-
-main()
