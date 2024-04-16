@@ -3,12 +3,12 @@ import DelimitedFiles
 
 # List of problems to test
 problems = [
-    # "qkd",
-    # "qrd",
-    # "qrd_ef",
+    "qrd",
+    "qrd_ef",
     "cc_ea",
     "cc_qq",
-    # "gse"
+    "gse",
+    "qkd"
 ]
 
 # Test settings
@@ -20,6 +20,7 @@ header = [
     "method",
     "description",
     "status",
+    "opt_val",
     "solve_time",
     "iter",
     "time_per_iter",

@@ -6,6 +6,7 @@ import Hypatia.Solvers
 
 include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
+include("../utils/helper.jl")
 
 T = Float64
 
@@ -91,29 +92,52 @@ function med_naive_problem(L::Int)
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 end
 
-function main()
+function precompile()
+    # Use quantum conditional entropy cone
+    model = med_problem(2)
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+
+    # Use quantum relative entropy cone
+    model = med_naive_problem(2)
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+end
+
+function main(csv_name::String, all_tests::Bool)
     # Estimate ground state energy of Hamiltonians 
     #   min  ⟨H,X⟩
     #   s.t. Tr_1[X] = Tr_L[X]
     #        tr[X] = 1
     #        S(L|1...L-1)_X ≥ 0
     #        X ⪰ 0
+    
+    test_set = [2; 3; 4; 5]
+    if all_tests
+        test_set = [test_set; 6; 7; 8]
+    end
 
-    L = 2
+    problem = "gse"
+    
+    # Precompile with small problem
+    precompile()
+    
+    # Loop through all the problems
+    for test in test_set
+        L = test
+        description = string(L)
 
-    # Use quantum conditional entropy cone
-    model = med_problem(L)
-    solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Ground state energy of Hamiltonian", "QCE") 
+        # Use quantum conditional entropy cone
+        model = med_problem(L)
+        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+        try_solve(model, solver, problem, description, "QCE", csv_name)
 
-    # Use quantum relative entropy cone
-    model = med_naive_problem(L)
-    solver = Solvers.Solver{T}(verbose = true)
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Ground state energy of Hamiltonian", "QRE")
+        # Use quantum relative entropy cone
+        model = med_naive_problem(L)
+        solver = Solvers.Solver{T}(verbose = true)
+        try_solve(model, solver, problem, description, "QRE", csv_name)
+    end
+
 end
-
-main()

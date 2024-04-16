@@ -9,6 +9,7 @@ include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/linear.jl")
 include("../utils/quantum.jl")
+include("../utils/helper.jl")
 
 import Random
 Random.seed!(1)
@@ -111,19 +112,19 @@ function precompile()
 
     # Use quantum mutual information cone
     model = qqcc_problem(2, 2, 2, N, Nc)
-    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum conditional entropy cone
     model = qqcc_qce_problem(2, 2, 2, N, W)
-    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum relative entropy cone
     model = qqcc_qre_problem(2, 2, 2, N, W)
-    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 end
@@ -136,12 +137,12 @@ function main(csv_name::String, all_tests::Bool)
 
     test_set = [
         (2, 2, 2);
-        (4, 4, 4);
-        # (8, 8, 8)
+        (4, 4, 4)
     ]
     if all_tests
         test_set = [
             test_set;
+            (8, 8, 8);
             (16, 16, 16);
             (32, 32, 32);
             (64, 64, 64)
@@ -158,9 +159,8 @@ function main(csv_name::String, all_tests::Bool)
         (ni, no, ne) = test
         description = string(ni) * "_" * string(no) * "_" * string(ne)
 
-        Random.seed!(1)
-
         # Define random instance of qq channel capacity problem
+        Random.seed!(1)
         V, W = randDegradableChannel(T, ni, no, ne)
         N(x)  = pTr!(zeros(T, no, no), V*x*V', 2, (no, ne))
         Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))

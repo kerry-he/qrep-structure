@@ -9,6 +9,7 @@ include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/linear.jl")
 include("../utils/quantum.jl")
+include("../utils/helper.jl")
 
 import Random
 Random.seed!(1)
@@ -253,39 +254,71 @@ function qrd_ef_qce_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(λ))
 end
 
+function precompile()
+    n = 2
+    λ = eigvals(randDensityMatrix(T, n))
+    D = 0.5
 
-function main()
+    # Use restriction of quantum conditional entropy cone to fixed point subspace
+    model = qrd_ef_problem(n, λ, D)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+
+    # Use decomposition of relative entropy cones
+    model = qrd_ef_qre_problem(n, λ, D)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+
+    # Use quantum conditional entropy cone with linear constraints
+    model = qrd_ef_qce_problem(n, λ, D)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)    
+end
+
+function main(csv_name::String, all_tests::Bool)
     # Solve quantum rate distortion problem with entaglement fidelity distortion
     #   min  S(B|BR)_G(y, Z) + S(W)
     #   s.t. Tr_B[G(y, Z)] = W
     #        ⟨Δ, G(y, Z)⟩ ≤ D
     #        y ≥ 0, Z ⪰ 0
-
-    # Define rate distortion problem with entanglement fidelity distortion
-    n = 4
-    λ = eigvals(randDensityMatrix(T, n))
-    D = 0.5
     
-    # Use restriction of quantum conditional entropy cone to fixed point subspace
-    model = qrd_ef_problem(n, λ, D)
-    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Quantum rate distortion w/ entanglement fidelity distortion", "QRD")
+    test_set = [2; 4; 8]
+    if all_tests
+        test_set = [test_set; 16; 32; 64]
+    end
 
-    # Use decomposition of relative entropy cones
-    model = qrd_ef_qre_problem(n, λ, D)
-    solver = Solvers.Solver{T}()
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Quantum rate distortion w/ entanglement fidelity distortion", "QRE*")
+    problem = "qrd_ef"
+    
+    # Precompile with small problem
+    precompile()
+    
+    # Loop through all the problems
+    for test in test_set
+        n = test
+        description = string(n)
 
-    # Use quantum conditional entropy cone with linear constraints
-    model = qrd_ef_qce_problem(n, λ, D)
-    solver = Solvers.Solver{T}()
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Quantum rate distortion w/ entanglement fidelity distortion", "QCE*")
+        # Generate problem data
+        Random.seed!(1)
+        λ = eigvals(randDensityMatrix(T, n))
+        D = 0.5
+
+        # Use restriction of quantum conditional entropy cone to fixed point subspace
+        model = qrd_ef_problem(n, λ, D)
+        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+        try_solve(model, solver, problem, description, "QRD", csv_name)
+
+        # Use decomposition of relative entropy cones
+        model = qrd_ef_qre_problem(n, λ, D)
+        solver = Solvers.Solver{T}(verbose = true)
+        try_solve(model, solver, problem, description, "QRE*", csv_name)
+
+        # Use quantum conditional entropy cone with linear constraints
+        model = qrd_ef_qce_problem(n, λ, D)
+        solver = Solvers.Solver{T}(verbose = true)
+        try_solve(model, solver, problem, description, "QCE*", csv_name)
+    end
+
 end
-
-main()

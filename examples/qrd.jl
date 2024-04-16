@@ -8,6 +8,7 @@ include("../cones/quantcondentr.jl")
 include("../systemsolvers/elim.jl")
 include("../utils/linear.jl")
 include("../utils/quantum.jl")
+include("../utils/helper.jl")
 
 import Random
 Random.seed!(1)
@@ -82,34 +83,62 @@ function qrd_naive_problem(n::Int, m::Int, W::Matrix{T}, Δ::Matrix{T}, D::Float
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(W))
 end
 
+function precompile()
+    n = 2
+    W = randDensityMatrix(T, n)
+    Δ = I - purify(W)
+    D = 0.5
 
-function main()
+    # Use quantum conditional entropy cone
+    model = qrd_problem(n, n, W, Δ, D)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+
+    # Use quantum relative entropy cone
+    model = qrd_naive_problem(n, n, W, Δ, D)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    Solvers.load(solver, model)
+    Solvers.solve(solver)
+end
+
+function main(csv_name::String, all_tests::Bool)
     # Solve the quantum rate distortion problem
     #   min  S(B|BR)_X + S(W)
     #   s.t. Tr_B[X] = W
     #        ⟨Δ, X⟩ ≤ D
     #        X ⪰ 0
-
-    # Define rate distortion problem with entanglement fidelity distortion
-    n = 4
-    W = randDensityMatrix(T, n)
-    Δ = I - purify(W)
-    D = 0.5
     
-    # Use quantum conditional entropy cone
-    model = qrd_problem(n, n, W, Δ, D)
-    solver = Solvers.Solver{T}(reduce = false, syssolver = ElimSystemSolver{T}())
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    print_statistics(solver, "Quantum rate distortion", "QCE")
+    test_set = [2; 4; 6]
+    if all_tests
+        test_set = [test_set; 8; 10; 12; 14; 16]
+    end
 
-    # Use quantum relative entropy cone
-    model = qrd_naive_problem(n, n, W, Δ, D)
-    solver = Solvers.Solver{T}()
-    Solvers.load(solver, model)
-    Solvers.solve(solver)
-    println("Solved using QRE cone")
-    print_statistics(solver, "Quantum rate distortion", "QRE")
+    problem = "qrd"
+    
+    # Precompile with small problem
+    precompile()
+    
+    # Loop through all the problems
+    for test in test_set
+        n = test
+        description = string(n)
+
+        # Generate problem data
+        Random.seed!(1)
+        W = randDensityMatrix(T, n)
+        Δ = I - purify(W)
+        D = 0.5
+
+        # Use quantum conditional entropy cone
+        model = qrd_problem(n, n, W, Δ, D)
+        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+        try_solve(model, solver, problem, description, "QCE", csv_name)
+
+        # Use quantum relative entropy cone
+        model = qrd_naive_problem(n, n, W, Δ, D)
+        solver = Solvers.Solver{T}(verbose = true)
+        try_solve(model, solver, problem, description, "QRE", csv_name)
+    end
+
 end
-
-main()

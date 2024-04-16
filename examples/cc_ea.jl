@@ -130,19 +130,19 @@ function precompile()
 
     # Use quantum mutual information cone
     model = eacc_problem(2, 2, 2, V)
-    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum conditional entropy cone
     model = eacc_qce_problem(2, 2, 2, V)
-    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum relative entropy cone
     model = eacc_qre_problem(2, 2, 2, V)
-    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 end
@@ -155,12 +155,12 @@ function main(csv_name::String, all_tests::Bool)
     
     test_set = [
         (2, 2, 2);
-        (4, 4, 4);
-        # (8, 8, 8)
+        (4, 4, 4)
     ]
     if all_tests
         test_set = [
             test_set;
+            (8, 8, 8);
             (16, 16, 16);
             (32, 32, 32);
             (64, 64, 64)
@@ -177,6 +177,7 @@ function main(csv_name::String, all_tests::Bool)
         (ni, no, ne) = test
         description = string(ni) * "_" * string(no) * "_" * string(ne)
 
+        # Generate random problem data
         Random.seed!(1)
         V = randStinespringOperator(T, ni, no, ne)
 
