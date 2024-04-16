@@ -153,18 +153,9 @@ function main(csv_name::String, all_tests::Bool)
     #   s.t. tr[X] = 1
     #        X ⪰ 0
     
-    test_set = [
-        (2, 2, 2);
-        (4, 4, 4)
-    ]
+    test_set = [2; 4]
     if all_tests
-        test_set = [
-            test_set;
-            (8, 8, 8);
-            (16, 16, 16);
-            (32, 32, 32);
-            (64, 64, 64)
-        ]
+        test_set = [test_set; 8; 16; 32; 64]
     end
 
     problem = "cc_ea"

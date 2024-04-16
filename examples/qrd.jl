@@ -1,4 +1,5 @@
 using LinearAlgebra
+import Random
 
 import Hypatia
 import Hypatia.Cones
@@ -9,9 +10,6 @@ include("../systemsolvers/elim.jl")
 include("../utils/linear.jl")
 include("../utils/quantum.jl")
 include("../utils/helper.jl")
-
-import Random
-Random.seed!(1)
 
 T = Float64
 

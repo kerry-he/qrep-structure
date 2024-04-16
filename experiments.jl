@@ -17,8 +17,8 @@ all_tests = false
 
 header = [
     "problem",
-    "method",
     "description",
+    "method",
     "status",
     "opt_val",
     "solve_time",

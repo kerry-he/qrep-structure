@@ -154,12 +154,12 @@ function main_dpr(csv_name::String, all_tests::Bool)
         ]
     end
 
-    problem = "qkd"
+    problem = "qkd_dpr"
     
     # Loop through all the problems
     for test in test_set
         f_name = test
-        description = f_name
+        description = parse(Int, split(f_name, "_")[2])
 
         # Generate problem data
         f = MAT.matopen("data/" * f_name * ".mat")
@@ -207,12 +207,12 @@ function main_dmcv(csv_name::String, all_tests::Bool)
         ]
     end
 
-    problem = "qkd"
+    problem = "qkd_dmcv"
     
     # Loop through all the problems
     for test in test_set
         f_name = test
-        description = f_name
+        description = parse(Int, split(f_name, "_")[2])
 
         # Generate problem data
         f = MAT.matopen("data/" * f_name * ".mat")
