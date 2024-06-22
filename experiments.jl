@@ -13,7 +13,7 @@ problems = [
 
 # Test settings
 csv_name = "out.csv"
-all_tests = false
+all_tests = true
 
 header = [
     "problem",
