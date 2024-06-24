@@ -3,8 +3,8 @@ import DelimitedFiles
 
 # List of problems to test
 problems = [
-    "qrd",
-    "qrd_ef",
+    # "qrd",
+    # "qrd_ef",
     "cc_ea",
     "cc_qq",
     "gse",

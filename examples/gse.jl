@@ -95,13 +95,13 @@ end
 function precompile()
     # Use quantum conditional entropy cone
     model = med_problem(2)
-    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum relative entropy cone
     model = med_naive_problem(2)
-    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 end

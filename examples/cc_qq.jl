@@ -112,19 +112,19 @@ function precompile()
 
     # Use quantum mutual information cone
     model = qqcc_problem(2, 2, 2, N, Nc)
-    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum conditional entropy cone
     model = qqcc_qce_problem(2, 2, 2, N, W)
-    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 
     # Use quantum relative entropy cone
     model = qqcc_qre_problem(2, 2, 2, N, W)
-    solver = Solvers.Solver{T}(verbose = true, iter_limit = 2)
+    solver = Solvers.Solver{T}(verbose = false, iter_limit = 2)
     Solvers.load(solver, model)
     Solvers.solve(solver)
 end
@@ -147,7 +147,7 @@ function main(csv_name::String, all_tests::Bool)
     
     # Loop through all the problems
     for test in test_set
-        (ni, no, ne) = test
+        ni = no = ne = test
         description = string(ni) * "_" * string(no) * "_" * string(ne)
 
         # Define random instance of qq channel capacity problem
