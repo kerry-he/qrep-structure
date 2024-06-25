@@ -105,7 +105,7 @@ function qqcc_qre_problem(ni::Int, no::Int, ne::Int, N::Function, W::Matrix{T}) 
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 end
 
-function precompile()
+function precompile_cc_qq()
     V, W = randDegradableChannel(T, 2, 2, 2)
     N(x)  = pTr!(zeros(T, 2, 2), V*x*V', 2, (2, 2))
     Nc(x) = pTr!(zeros(T, 2, 2), V*x*V', 1, (2, 2))
@@ -129,7 +129,7 @@ function precompile()
     Solvers.solve(solver)
 end
 
-function main(csv_name::String, all_tests::Bool)
+function main_cc_qq(csv_name::String, all_tests::Bool)
     # Solve for quantum-quantum channel capacity
     #   max  -S( WN(X)W' || I x Tr_2[WN(X)W'] )
     #   s.t. tr[X] = 1
@@ -143,12 +143,12 @@ function main(csv_name::String, all_tests::Bool)
     problem = "cc_qq"
     
     # Precompile with small problem
-    precompile()
+    precompile_cc_qq()
     
     # Loop through all the problems
     for test in test_set
         ni = no = ne = test
-        description = string(ni) * "_" * string(no) * "_" * string(ne)
+        description = string(ni)
 
         # Define random instance of qq channel capacity problem
         Random.seed!(1)

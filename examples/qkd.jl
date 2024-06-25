@@ -89,7 +89,7 @@ function qkd_naive_problem(
 end
 
 
-function precompile()
+function precompile_qkd()
     # Get problem data for dprBB84 quantum key rate protocol
     f_name = "dprBB84_02_14_30"
     f = MAT.matopen("data/" * f_name * ".mat")
@@ -125,14 +125,14 @@ function precompile()
     Solvers.solve(solver)
 end
 
-function main(csv_name::String, all_tests::Bool)
+function main_qkd(csv_name::String, all_tests::Bool)
     # Solve for quantum key rate
     #   min  S( G(X) || Z(G(X)) )
     #   s.t. A(X) = b
     #        X ⪰ 0
     
     # Precompile with small problem
-    precompile()
+    precompile_qkd()
     
     main_dpr(csv_name, all_tests)
     main_dmcv(csv_name, all_tests)

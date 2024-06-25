@@ -125,7 +125,7 @@ function eacc_qre_problem(ni::Int, no::Int, ne::Int, V::Matrix{T}) where {T <: R
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 end
 
-function precompile()
+function precompile_cc_ea()
     V = randStinespringOperator(T, 2, 2, 2)
 
     # Use quantum mutual information cone
@@ -147,7 +147,7 @@ function precompile()
     Solvers.solve(solver)
 end
 
-function main(csv_name::String, all_tests::Bool)
+function main_cc_ea(csv_name::String, all_tests::Bool)
     # Solve entanglement assisted channel capacity
     #   max  -S(B|BE)_VXV' + S(B)_VXV'
     #   s.t. tr[X] = 1
@@ -161,12 +161,12 @@ function main(csv_name::String, all_tests::Bool)
     problem = "cc_ea"
     
     # Precompile with small problem
-    precompile()
+    precompile_cc_ea()
     
     # Loop through all the problems
     for test in test_set
         ni = no = ne = test
-        description = string(ni) * "_" * string(no) * "_" * string(ne)
+        description = string(ni)
 
         # Generate random problem data
         Random.seed!(1)

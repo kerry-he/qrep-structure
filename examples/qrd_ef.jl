@@ -252,7 +252,7 @@ function qrd_ef_qce_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(λ))
 end
 
-function precompile()
+function precompile_qrd_ef()
     n = 2
     λ = eigvals(randDensityMatrix(T, n))
     D = 0.5
@@ -276,7 +276,7 @@ function precompile()
     Solvers.solve(solver)    
 end
 
-function main(csv_name::String, all_tests::Bool)
+function main_qrd_ef(csv_name::String, all_tests::Bool)
     # Solve quantum rate distortion problem with entaglement fidelity distortion
     #   min  S(B|BR)_G(y, Z) + S(W)
     #   s.t. Tr_B[G(y, Z)] = W
@@ -291,7 +291,7 @@ function main(csv_name::String, all_tests::Bool)
     problem = "qrd_ef"
     
     # Precompile with small problem
-    precompile()
+    precompile_qrd_ef()
     
     # Loop through all the problems
     for test in test_set

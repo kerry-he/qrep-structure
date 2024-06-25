@@ -81,7 +81,7 @@ function qrd_naive_problem(n::Int, m::Int, W::Matrix{T}, Δ::Matrix{T}, D::Float
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones, obj_offset=entr(W))
 end
 
-function precompile()
+function precompile_qrd()
     n = 2
     W = randDensityMatrix(T, n)
     Δ = I - purify(W)
@@ -100,7 +100,7 @@ function precompile()
     Solvers.solve(solver)
 end
 
-function main(csv_name::String, all_tests::Bool)
+function main_qrd(csv_name::String, all_tests::Bool)
     # Solve the quantum rate distortion problem
     #   min  S(B|BR)_X + S(W)
     #   s.t. Tr_B[X] = W
@@ -115,7 +115,7 @@ function main(csv_name::String, all_tests::Bool)
     problem = "qrd"
     
     # Precompile with small problem
-    precompile()
+    precompile_qrd()
     
     # Loop through all the problems
     for test in test_set

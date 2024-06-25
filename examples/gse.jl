@@ -92,7 +92,7 @@ function med_naive_problem(L::Int)
     return Hypatia.Models.Model{T}(c, A, b, G, h, cones)
 end
 
-function precompile()
+function precompile_gse()
     # Use quantum conditional entropy cone
     model = med_problem(2)
     solver = Solvers.Solver{T}(verbose = false, iter_limit = 2, reduce = false, syssolver = ElimSystemSolver{T}())
@@ -106,7 +106,7 @@ function precompile()
     Solvers.solve(solver)
 end
 
-function main(csv_name::String, all_tests::Bool)
+function main_gse(csv_name::String, all_tests::Bool)
     # Estimate ground state energy of Hamiltonians 
     #   min  ⟨H,X⟩
     #   s.t. Tr_1[X] = Tr_L[X]
@@ -122,7 +122,7 @@ function main(csv_name::String, all_tests::Bool)
     problem = "gse"
     
     # Precompile with small problem
-    precompile()
+    precompile_gse()
     
     # Loop through all the problems
     for test in test_set
