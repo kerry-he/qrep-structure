@@ -1,7 +1,7 @@
 using LinearAlgebra
 import Hypatia.Cones
 
-include("../utils/helper.jl")
+include("../utils/linear.jl")
 include("../utils/spectral.jl")
 
 mutable struct QuantCondEntropy{T <: Real} <: Hypatia.Cones.Cone{T}

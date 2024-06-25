@@ -1,7 +1,7 @@
 using LinearAlgebra
 import Hypatia.Cones
 
-include("../utils/helper.jl")
+include("../utils/linear.jl")
 include("../utils/quantum.jl")
 
 mutable struct QuantKeyRate{T <: Real, R <: Hypatia.RealOrComplex{T}} <: Hypatia.Cones.Cone{T}

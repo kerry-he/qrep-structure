@@ -14,7 +14,7 @@ import Hypatia.Cones
 mutable struct ElimSystemSolver{T <: Real} <: Hypatia.Solvers.SystemSolver{T}
     HA::Matrix{T}
     AHA::Matrix{T}
-    AHA_chol::Union{Factorization{T}, T}
+    AHA_chol::Any
 
     xb::Vector{T}
     yb::Vector{T}
