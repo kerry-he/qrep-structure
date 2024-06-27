@@ -63,6 +63,6 @@ Additional examples, including
  - quantum-quantum channel capacity for degradable channels, and
  - ground state energy of Hamiltonians,
 
-can be found in the [examples folder](https://github.com/kerry-he/qrep-structure/tree/main/examples). You can also run the script `experiments.jl` to reproduce the experiments shown in our paper.
+can be found in the [examples folder](https://github.com/kerry-he/qrep-structure/tree/main/examples). You can also run the script `experiments.jl` to reproduce the experiments shown in our paper. The raw data for the results reported in the paper can be found [here](https://github.com/kerry-he/qrep-structure/blob/main/out.csv).
 
 Note that we have also implemented a simple block elimination method to solve the Newton equations, which can improve computational performance over Hypatia's default Newton system solver when `G` is a square diagonal matrix.
