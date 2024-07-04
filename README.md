@@ -66,3 +66,15 @@ Additional examples, including
 can be found in the [examples folder](https://github.com/kerry-he/qrep-structure/tree/main/examples). You can also run the script `experiments.jl` to reproduce the experiments shown in our paper. The raw data for the results reported in the paper can be found [here](https://github.com/kerry-he/qrep-structure/blob/main/out.csv).
 
 Note that we have also implemented a simple block elimination method to solve the Newton equations, which can improve computational performance over Hypatia's default Newton system solver when `G` is a square diagonal matrix.
+
+
+## Citation
+
+This code is based on the work the paper here: <https://arxiv.org/abs/2407.00241>. If you find our work useful, please cite us using
+
+	@article{he2024efficient,
+	  title={Exploiting Structure in Quantum Relative Entropy Programs},
+	  author={He, Kerry and Saunderson, James and Fawzi, Hamza},
+	  journal={arXiv preprint arXiv:2407.00241},
+	  year={2024}
+	}
