@@ -93,18 +93,21 @@ function precompile_qkd()
     # Get problem data for dprBB84 quantum key rate protocol
     f_name = "dprBB84_02_14_30"
     f = MAT.matopen("data/" * f_name * ".mat")
-    data = MAT.read(f, "Data")
+    K_list = MAT.read(f, "Klist")
+    Z_list = MAT.read(f, "Zlist")
+    Γ = MAT.read(f, "Gamma")
+    γ = MAT.read(f, "gamma")
 
-    if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma"][:]) == 0)
+    if all(imag(K_list[:]) == 0) && all(imag(Γ[:]) == 0)
         R = T
     else
         R = Complex{T}
     end
-    
-    K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
-    Z_list = convert(Vector{Matrix{T}}, data["Zlist"][:])
-    Γ = convert(Vector{Matrix{R}}, data["Gamma"][:])
-    γ = convert(Vector{T}, data["gamma"][:])
+
+    K_list = convert(Vector{Matrix{R}}, K_list[:])
+    Z_list = convert(Vector{Matrix{T}}, Z_list[:])
+    Γ = convert(Vector{Matrix{R}}, Γ[:])
+    γ = convert(Vector{T}, γ[:])
 
     # Use specialized dprBB4 oracle
     models = [
@@ -134,7 +137,7 @@ function main_qkd(csv_name::String, all_tests::Bool)
     # Precompile with small problem
     precompile_qkd()
     
-    main_dpr(csv_name, all_tests)
+    # main_dpr(csv_name, all_tests)
     main_dmcv(csv_name, all_tests)
 end
 
@@ -163,18 +166,21 @@ function main_dpr(csv_name::String, all_tests::Bool)
 
         # Generate problem data
         f = MAT.matopen("data/" * f_name * ".mat")
-        data = MAT.read(f, "Data")
+        K_list = MAT.read(f, "Klist")
+        Z_list = MAT.read(f, "Zlist")
+        Γ = MAT.read(f, "Gamma")
+        γ = MAT.read(f, "gamma")
     
-        if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma"][:]) == 0)
+        if all(imag(K_list[:]) == 0) && all(imag(Γ[:]) == 0)
             R = T
         else
             R = Complex{T}
         end
 
-        K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
-        Z_list = convert(Vector{Matrix{T}}, data["Zlist"][:])
-        Γ = convert(Vector{Matrix{R}}, data["Gamma"][:])
-        γ = convert(Vector{T}, data["gamma"][:])        
+        K_list = convert(Vector{Matrix{R}}, K_list[:])
+        Z_list = convert(Vector{Matrix{T}}, Z_list[:])
+        Γ = convert(Vector{Matrix{R}}, Γ[:])
+        γ = convert(Vector{T}, γ[:])        
 
         # Use specialized dprBB4 oracle
         model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
@@ -199,7 +205,7 @@ function main_dmcv(csv_name::String, all_tests::Bool)
     test_set = ["DMCV_04_60_05_35"]
     if all_tests
         test_set = [
-            test_set;  
+            # test_set;  
             "DMCV_08_60_05_35";
             "DMCV_12_60_05_35";
             "DMCV_16_60_05_35";
@@ -216,18 +222,21 @@ function main_dmcv(csv_name::String, all_tests::Bool)
 
         # Generate problem data
         f = MAT.matopen("data/" * f_name * ".mat")
-        data = MAT.read(f, "Data")
+        K_list = MAT.read(f, "Klist")
+        Z_list = MAT.read(f, "Zlist")
+        Γ = MAT.read(f, "Gamma")
+        γ = MAT.read(f, "gamma")
     
-        if all(imag(data["Klist"][:]) == 0) && all(imag(data["Gamma"][:]) == 0)
+        if all(imag(K_list[:]) == 0) && all(imag(Γ[:]) == 0)
             R = T
         else
             R = Complex{T}
         end
 
-        K_list = convert(Vector{Matrix{R}}, data["Klist"][:])
-        Z_list = convert(Vector{Matrix{T}}, data["Zlist"][:])
-        Γ = convert(Vector{Matrix{R}}, data["Gamma"][:])
-        γ = convert(Vector{T}, data["gamma"][:])        
+        K_list = convert(Vector{Matrix{R}}, K_list[:])
+        Z_list = convert(Vector{Matrix{T}}, Z_list[:])
+        Γ = convert(Vector{Matrix{R}}, Γ[:])
+        γ = convert(Vector{T}, γ[:])          
 
         # Use specialized QKD oracle with block diagonalization
         model = qkd_problem(K_list, Z_list, Γ, γ)
