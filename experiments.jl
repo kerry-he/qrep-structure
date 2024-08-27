@@ -20,7 +20,7 @@ problems = [
 
 # Test settings
 csv_name = "out.csv"
-all_tests = isempty(ARGS) ? false : ARGS[1]
+all_tests = isempty(ARGS) ? false : (ARGS[1] == "true")
 
 header = [
     "problem",
