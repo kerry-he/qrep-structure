@@ -26,7 +26,7 @@ function qrd_ef_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
 
     # Construct matrix of indices
     indices = zeros(Int, n, n)
-    temp = reshape(range(1, n*(n-1)), (n-1, n))
+    temp = reshape(1:n*(n-1), (n-1, n))
     indices[2:end, :] += tril(temp)
     indices[1:end-1, :] += triu(temp, 1)
 
@@ -79,7 +79,7 @@ function qrd_ef_qre_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
 
     # Construct matrix of indices
     indices = zeros(Int, n, n)
-    temp = reshape(range(1, n*(n-1)), (n-1, n))
+    temp = reshape(1:n*(n-1), (n-1, n))
     indices[2:end, :] += tril(temp)
     indices[1:end-1, :] += triu(temp, 1)
 
@@ -192,7 +192,7 @@ function qrd_ef_qce_problem(n::Int, λ::Vector{T}, D::Float64) where {T <: Real}
 
     # Construct matrix of indices
     indices = zeros(Int, n, n)
-    temp = reshape(range(1, n*(n-1)), (n-1, n))
+    temp = reshape(1:n*(n-1), (n-1, n))
     indices[2:end, :] += tril(temp)
     indices[1:end-1, :] += triu(temp, 1)
 
@@ -304,19 +304,31 @@ function main_qrd_ef(csv_name::String, all_tests::Bool)
         D = 0.5
 
         # Use restriction of quantum conditional entropy cone to fixed point subspace
-        model = qrd_ef_problem(n, λ, D)
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "QRD", csv_name)
+        try
+            model = qrd_ef_problem(n, λ, D)
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "QRD", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRD", csv_name)
+        end
 
         # Use decomposition of relative entropy cones
-        model = qrd_ef_qre_problem(n, λ, D)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QRE*", csv_name)
+        try
+            model = qrd_ef_qre_problem(n, λ, D)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QRE*", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRE*", csv_name)
+        end
 
         # Use quantum conditional entropy cone with linear constraints
-        model = qrd_ef_qce_problem(n, λ, D)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QCE*", csv_name)
+        try
+            model = qrd_ef_qce_problem(n, λ, D)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QCE*", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QCE*", csv_name)
+        end
     end
 
 end

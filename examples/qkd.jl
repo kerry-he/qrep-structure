@@ -183,19 +183,31 @@ function main_dpr(csv_name::String, all_tests::Bool)
         γ = convert(Vector{T}, γ[:])        
 
         # Use specialized dprBB4 oracle
-        model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "DPR", csv_name)
+        try
+            model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84")
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "DPR", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "DPR", csv_name)
+        end
 
         # Use specialized QKD oracle with block diagonalization
-        model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84_naive")
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "QKD", csv_name)
+        try
+            model = qkd_problem(K_list, Z_list, Γ, γ, "dprBB84_naive")
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "QKD", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QKD", csv_name)
+        end
 
         # Use generic QRD oracle
-        model = qkd_naive_problem(K_list, Z_list, Γ, γ)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QRE", csv_name)
+        try
+            model = qkd_naive_problem(K_list, Z_list, Γ, γ)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QRE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRE", csv_name)
+        end
     end
 
 end
@@ -239,14 +251,22 @@ function main_dmcv(csv_name::String, all_tests::Bool)
         γ = convert(Vector{T}, γ[:])          
 
         # Use specialized QKD oracle with block diagonalization
-        model = qkd_problem(K_list, Z_list, Γ, γ)
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "QKD", csv_name)
+        try
+            model = qkd_problem(K_list, Z_list, Γ, γ)
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "QKD", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QKD", csv_name)
+        end
 
         # Use generic QRD oracle
-        model = qkd_naive_problem(K_list, Z_list, Γ, γ)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QRE", csv_name)
+        try
+            model = qkd_naive_problem(K_list, Z_list, Γ, γ)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QRE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRE", csv_name)
+        end
     end
 
 end

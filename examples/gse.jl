@@ -130,14 +130,22 @@ function main_gse(csv_name::String, all_tests::Bool)
         description = string(L)
 
         # Use quantum conditional entropy cone
-        model = med_problem(L)
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "QCE", csv_name)
+        try
+            model = med_problem(L)
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "QCE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QCE", csv_name)
+        end
 
         # Use quantum relative entropy cone
-        model = med_naive_problem(L)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QRE", csv_name)
+        try
+            model = med_naive_problem(L)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QRE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRE", csv_name)
+        end
     end
 
 end

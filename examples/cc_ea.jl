@@ -173,19 +173,31 @@ function main_cc_ea(csv_name::String, all_tests::Bool)
         V = randStinespringOperator(T, ni, no, ne)
 
         # Use quantum mutual information cone
-        model = eacc_problem(ni, no, ne, V)
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "QMI", csv_name)
+        try
+            model = eacc_problem(ni, no, ne, V)
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "QMI", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QMI", csv_name)
+        end
 
         # Use quantum conditional entropy cone
-        model = eacc_qce_problem(ni, no, ne, V)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QCE", csv_name)
+        try
+            model = eacc_qce_problem(ni, no, ne, V)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QCE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QCE", csv_name)
+        end
 
         # Use quantum relative entropy cone
-        model = eacc_qre_problem(ni, no, ne, V)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QRE", csv_name)
+        try
+            model = eacc_qre_problem(ni, no, ne, V)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QRE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRE", csv_name)
+        end
     end
 
 end

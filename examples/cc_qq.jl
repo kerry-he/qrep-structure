@@ -157,19 +157,31 @@ function main_cc_qq(csv_name::String, all_tests::Bool)
         Nc(x) = pTr!(zeros(T, ne, ne), V*x*V', 1, (no, ne))
 
         # Use quantum conditional information cone
-        model = qqcc_problem(ni, no, ne, N, Nc)
-        solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
-        try_solve(model, solver, problem, description, "QCI", csv_name)
+        try
+            model = qqcc_problem(ni, no, ne, N, Nc)
+            solver = Solvers.Solver{T}(verbose = true, reduce = false, syssolver = ElimSystemSolver{T}())
+            try_solve(model, solver, problem, description, "QCI", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QCI", csv_name)
+        end
 
         # Use quantum conditional entropy cone
-        model = qqcc_qce_problem(ni, no, ne, N, W)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QCE", csv_name)
+        try
+            model = qqcc_qce_problem(ni, no, ne, N, W)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QCE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QCE", csv_name)
+        end
 
         # Use quantum relative entropy cone
-        model = qqcc_qre_problem(ni, no, ne, N, W)
-        solver = Solvers.Solver{T}(verbose = true)
-        try_solve(model, solver, problem, description, "QRE", csv_name)
+        try
+            model = qqcc_qre_problem(ni, no, ne, N, W)
+            solver = Solvers.Solver{T}(verbose = true)
+            try_solve(model, solver, problem, description, "QRE", csv_name)
+        catch exception
+            save_and_print_fail(exception, problem, description, "QRE", csv_name)
+        end
     end
 
 end
