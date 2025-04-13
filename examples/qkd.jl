@@ -137,7 +137,7 @@ function main_qkd(csv_name::String, all_tests::Bool)
     # Precompile with small problem
     precompile_qkd()
     
-    # main_dpr(csv_name, all_tests)
+    main_dpr(csv_name, all_tests)
     main_dmcv(csv_name, all_tests)
 end
 
