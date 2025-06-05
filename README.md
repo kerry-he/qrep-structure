@@ -9,7 +9,7 @@ $$\min_{X\in\mathbb{H}^{n}} \quad S({\mathcal{G}(X)}\\|{\mathcal{H}(X)}), \quad 
 
 by implementing efficient cone oracles for the cone
 
-$$  \mathcal{K}_{\text{qre}}^{\mathcal{G}, \mathcal{H}} \coloneqq  \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^n\_{\++} : t \geq S({\mathcal{G}(X)}\\|{\mathcal{H}(X)}) \\}, $$
+$$  \mathcal{K}_{\text{qre}}^{\mathcal{G}, \mathcal{H}} = \text{cl} \\{ (t, X)\in\mathbb{R}\times\mathbb{H}^n\_{\++} : t \geq S({\mathcal{G}(X)}\\|{\mathcal{H}(X)}) \\}, $$
 
 to use with the generic conic programming software [Hypatia](https://github.com/jump-dev/Hypatia.jl). We currently have implementations for the following variants of quantum relative entropy.
 
@@ -67,7 +67,19 @@ can be found in the [examples folder](https://github.com/kerry-he/qrep-structure
 
 	julia experiments.jl all
 
-to reproduce the experiments shown in our paper (omitting the `all` argument runs a subset of the experiemnts corresponding to smaller problem instances). The raw data for the results reported in the paper can be found [here](https://github.com/kerry-he/qrep-structure/blob/main/out.csv).
+to reproduce the experiments shown in our paper (omitting the `all` argument runs a subset of the experiemnts corresponding to smaller problem instances). The raw data for the results reported in the paper can be found [here](https://github.com/kerry-he/qrep-structure/blob/main/out.csv). Below is a table showing how to map the results from the output file `out.csv` to results in our paper (see [Citation](#citation)).
+
+Note: The parameterization corresponds to the values listed under the **"Description"** heading in `out.csv`.
+
+| Problem Identifier | Corresponding Table | Parameterization |
+|--------------------|---------------------|------------------|
+| `qrd`              | Table 5.3           | $n$              |
+| `qrd_ef`           | Table 5.4           | $n$              |
+| `cc_ea`            | Table 5.5           | $n$              |
+| `cc_qq`            | Table 5.6           | $n$              |
+| `gse`              | Table 5.7           | $l$              |
+| `qkd_dpr`          | Table 5.1           | $c$              |
+| `qkd_dmcv`         | Table 5.2           | $N_c$            |
 
 Note that we have also implemented a simple block elimination method to solve the Newton equations, which can improve computational performance over Hypatia's default Newton system solver when `G` is a square diagonal matrix.
 
